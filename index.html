@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sputnika 3D - 1인칭 발사 게임</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+        }
+
+        #nextPlanet {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+            text-align: center;
+        }
+
+        #planetPreview {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 10px auto;
+            border: 2px solid white;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+            max-width: 300px;
+        }
+
+        #powerMeter {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+            text-align: center;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid #ff0000;
+            text-align: center;
+            display: none;
+        }
+
+        button {
+            background: #00ffff;
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+
+        button:hover {
+            background: #00cccc;
+        }
+
+        .power-bar {
+            width: 200px;
+            height: 20px;
+            background: #333;
+            border: 2px solid #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px auto;
+        }
+
+        .power-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #ffff00, #ff0000);
+            width: 0%;
+            transition: width 0.1s;
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 150;
+            color: #ff0000;
+            font-size: 24px;
+            pointer-events: none;
+            text-shadow: 0 0 10px #ff0000;
+        }
+
+        .trajectory-info {
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #00ff00;
+            display: none;
+        }
+
+        #gameSettings {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #ffaa00;
+            min-width: 300px;
+        }
+
+        .setting-row {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .setting-label {
+            color: #ffaa00;
+            font-weight: bold;
+            min-width: 100px;
+        }
+
+        .setting-value {
+            color: #00ffff;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .range-slider {
+            width: 120px;
+            height: 5px;
+            border-radius: 5px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+            margin: 0 10px;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #ffaa00;
+            cursor: pointer;
+        }
+
+        .range-slider::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #ffaa00;
+            cursor: pointer;
+            border: none;
+        }
+
+        .toggle-settings {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: none;
+            border: 1px solid #ffaa00;
+            color: #ffaa00;
+            padding: 2px 8px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="gameContainer">
+        <!-- 십자선 -->
+        <div class="crosshair">⊕</div>
+        
+        <!-- 게임 설정 패널 -->
+        <div id="gameSettings">
+            <button class="toggle-settings" onclick="toggleSettings()">접기</button>
+            <h4>⚙️ 게임 설정</h4>
+            <div class="setting-row">
+                <span class="setting-label">중력 세기:</span>
+                <input type="range" class="range-slider" id="gravitySlider" min="1" max="50" value="23.5" step="0.5">
+                <span class="setting-value" id="gravityValue">23.5</span>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">최대 파워:</span>
+                <input type="range" class="range-slider" id="powerSlider" min="2" max="15" value="6" step="0.2">
+                <span class="setting-value" id="maxPowerValue">6</span>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">중력장 크기:</span>
+                <input type="range" class="range-slider" id="areaSlider" min="4.5" max="15" value="6" step="0.5">
+                <span class="setting-value" id="areaValue">6</span>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">궤적 점 개수:</span>
+                <input type="range" class="range-slider" id="trajectorySlider" min="30" max="300" value="120" step="10">
+                <span class="setting-value" id="trajectoryValue">120</span>
+            </div>
+        </div>
+        
+        <!-- 게임 정보 UI -->
+        <div id="ui">
+            <h3>🚀 Sputnika 3D</h3>
+            <div>점수: <span id="score">0</span></div>
+            <div>최고점수: <span id="bestScore">0</span></div>
+        </div>
+        
+        <!-- 다음 행성 미리보기 -->
+        <div id="nextPlanet">
+            <h4>다음 행성</h4>
+            <div id="planetPreview"></div>
+        </div>
+        
+        <!-- 발사 파워 미터 -->
+        <div id="powerMeter">
+            <h4>발사 파워</h4>
+            <div class="power-bar">
+                <div class="power-fill" id="powerFill"></div>
+            </div>
+            <div id="powerValue">0%</div>
+        </div>
+        
+        <!-- 궤적 정보 -->
+        <div id="trajectoryInfo" class="trajectory-info">
+            <div>🎯 조준 중...</div>
+            <div>드래그하여 발사!</div>
+        </div>
+        
+        <!-- 컨트롤 설명 -->
+        <div id="controls">
+            <h4>🎮 조작법</h4>
+            <div>🖱️ <strong>마우스 드래그</strong>: 조준 & 발사</div>
+            <div>⌨️ <strong>A/D</strong>: 중력장 주위 공전</div>
+            <div>⌨️ <strong>W/S</strong>: 카메라 높이 조절</div>
+            <div>⌨️ <strong>스페이스</strong>: 직진 발사</div>
+            <div style="margin-top: 10px; font-size: 12px; color: #aaa;">
+                💡 같은 행성끼리 충돌하면 합쳐집니다!<br>
+                🚀 A/D로 공전하며 다양한 각도에서 발사!<br>
+                🎯 드래그 거리가 발사 파워를 결정합니다!
+            </div>
+        </div>
+        
+        <!-- 게임 오버 화면 -->
+        <div id="gameOver">
+            <h2>🌌 게임 오버!</h2>
+            <p>최종 점수: <span id="finalScore">0</span></p>
+            <button onclick="restartGame()">🚀 다시 시작</button>
+        </div>
+    </div>
+
+    <!-- Three.js 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Cannon.js 물리 엔진 (여러 CDN 시도) -->
+
+    <script src="
+    https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js
+    "></script>
+    
+    <!-- 게임 스크립트 -->
+    <script src="game.js"></script>
+    
+    <script>
+        // 파워 미터 업데이트
+        function updatePowerMeter(power) {
+            const powerFill = document.getElementById('powerFill');
+            const powerValue = document.getElementById('powerValue');
+            
+            // 게임에서 최대 파워 설정을 가져오기
+            const maxPower = window.GAME_CONFIG ? window.GAME_CONFIG.maxPower : 15;
+            const percentage = Math.min((power / maxPower) * 100, 100);
+            
+            powerFill.style.width = percentage + '%';
+            powerValue.textContent = Math.round(percentage) + '%';
+        }
+        
+        // 궤적 정보 표시/숨기기
+        function showTrajectoryInfo(show) {
+            const trajectoryInfo = document.getElementById('trajectoryInfo');
+            trajectoryInfo.style.display = show ? 'block' : 'none';
+        }
+        
+        // 드래그 상태에 따른 UI 업데이트
+        document.addEventListener('mousedown', () => {
+            showTrajectoryInfo(true);
+        });
+        
+        document.addEventListener('mouseup', () => {
+            showTrajectoryInfo(false);
+            updatePowerMeter(0);
+        });
+        
+        document.addEventListener('mousemove', (event) => {
+            // 파워 미터는 game.js에서 업데이트됨
+        });
+        
+        // 전역 함수로 파워 미터 업데이트 함수 노출
+        window.updatePowerMeter = updatePowerMeter;
+        window.showTrajectoryInfo = showTrajectoryInfo;
+
+        // 설정 패널 토글
+        let settingsCollapsed = false;
+        function toggleSettings() {
+            const settings = document.getElementById('gameSettings');
+            const toggleBtn = settings.querySelector('.toggle-settings');
+            
+            if (settingsCollapsed) {
+                settings.style.height = 'auto';
+                settings.style.overflow = 'visible';
+                toggleBtn.textContent = '접기';
+                settingsCollapsed = false;
+            } else {
+                settings.style.height = '40px';
+                settings.style.overflow = 'hidden';
+                toggleBtn.textContent = '펼치기';
+                settingsCollapsed = true;
+            }
+        }
+
+        // 설정 값 업데이트
+        function updateGameSettings() {
+            const gravitySlider = document.getElementById('gravitySlider');
+            const powerSlider = document.getElementById('powerSlider');
+            const areaSlider = document.getElementById('areaSlider');
+            const trajectorySlider = document.getElementById('trajectorySlider');
+            
+            const gravityValue = document.getElementById('gravityValue');
+            const maxPowerValueDisplay = document.getElementById('maxPowerValue');
+            const areaValue = document.getElementById('areaValue');
+            const trajectoryValue = document.getElementById('trajectoryValue');
+            
+            // 슬라이더 이벤트 리스너
+            gravitySlider.addEventListener('input', function() {
+                const value = parseFloat(this.value);
+                gravityValue.textContent = value;
+                if (window.updateGameConfig) {
+                    window.updateGameConfig('gravity', value);
+                }
+            });
+            
+            powerSlider.addEventListener('input', function() {
+                const value = parseInt(this.value);
+                maxPowerValueDisplay.textContent = value;
+                if (window.updateGameConfig) {
+                    window.updateGameConfig('maxPower', value);
+                }
+            });
+            
+            areaSlider.addEventListener('input', function() {
+                const value = parseFloat(this.value);
+                areaValue.textContent = value;
+                if (window.updateGameConfig) {
+                    window.updateGameConfig('areaSize', value);
+                }
+            });
+            
+            trajectorySlider.addEventListener('input', function() {
+                const value = parseInt(this.value);
+                trajectoryValue.textContent = value;
+                if (window.updateGameConfig) {
+                    window.updateGameConfig('trajectorySteps', value);
+                }
+            });
+        }
+
+        // 설정 초기화
+        window.addEventListener('load', function() {
+            updateGameSettings();
+        });
+
+        // 전역 함수 노출
+        window.toggleSettings = toggleSettings;
+    </script>
+</body>
+
+</html>

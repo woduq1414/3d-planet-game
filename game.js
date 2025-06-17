@@ -1,48 +1,16 @@
-// 게임 설정 상수들 (UI에서 제어 가능)
+// 업데이트 사항 (박재현)
+// 1. 초반에 행성 3개 소환 후 화성을 만드는데, 이는 그냥 행성 1개를 만드는 것과 동일하여 createTestPlanet 함수 수정
+// 2. 행성이 중력장 내에 위치하고 충분한 시간이 지나도 떨림 현상 발생. 이를 방지하기 위해 추가 코드 작성.
+// 3. 발사 파워에서 게이지가 제대로 표시 안된점 수정, 최대 100% 까지 표시는되는데, 실제론 50%임 (50%를 100%로 표시되게.)
+// 4. 발사시 딜레이 추가. 1초.
+
+// 게임 설정 상수들 (고정값으로 변경)
 const GAME_CONFIG = {
-    gravity: 23.5,     // 중력 세기
-    maxPower: 15,      // 최대 발사 파워
-    areaSize: 6,       // 중력장 크기
+    gravity: 35,      // 중력 세기
+    maxPower: 6,      // 최대 발사 파워
+    areaSize: 5,      // 중력장 크기
     trajectorySteps: 120  // 궤적 계산 점의 개수
 };
-
-// 게임 설정 업데이트 함수
-function updateGameConfig(setting, value) {
-    const oldValue = GAME_CONFIG[setting];
-    GAME_CONFIG[setting] = value;
-    console.log(`🔧 게임 설정 업데이트: ${setting} = ${oldValue} → ${value}`);
-    
-    // 중력장 크기가 변경된 경우 게임 영역 업데이트
-    if (setting === 'areaSize' && gameArea) {
-        // 기존 게임 영역 제거
-        scene.remove(gameArea);
-        
-        // 새로운 게임 영역 생성
-        GAME_AREA.radius = value;
-        GAME_AREA.height = value * 2;
-        createGameArea();
-        console.log(`🌍 중력장 크기 업데이트 완료: 반지름 ${value}`);
-    }
-    
-    // 최대 파워가 변경된 경우 추가 로그
-    if (setting === 'maxPower') {
-        console.log(`⚡ 최대 발사 파워 업데이트 완료: ${value}`);
-    }
-    
-    // 중력이 변경된 경우 추가 로그
-    if (setting === 'gravity') {
-        console.log(`🌌 중력 강도 업데이트 완료: ${value}`);
-    }
-    
-    // 궤적 점 개수가 변경된 경우 추가 로그
-    if (setting === 'trajectorySteps') {
-        console.log(`📈 궤적 점 개수 업데이트 완료: ${value}`);
-    }
-}
-
-// 전역 함수로 노출
-window.updateGameConfig = updateGameConfig;
-window.GAME_CONFIG = GAME_CONFIG;
 
 // 게임 변수들
 let scene, camera, renderer, world;
@@ -62,8 +30,10 @@ let dragStart = new THREE.Vector2();
 let dragEnd = new THREE.Vector2();
 let launchPower = 0;
 let trajectoryLine;
-let aimingPlanet; // 조준 중인 행성
+let aimingPlanet; // 조준용 행성
 let crosshair; // 십자선
+let isLaunching = false; // 발사 중복 방지를 위한 상태 변수 추가
+let canDrag = true; // 드래그 가능 여부를 나타내는 변수 추가 (박재현)
 
 // 카메라 공전 시스템 변수들
 let cameraAngle = 0; // Y축 기준 회전 각도 (라디안)
@@ -88,23 +58,59 @@ const pressedKeys = new Set();
 
 // 행성 정의 (크기 순서대로)
 const PLANET_TYPES = [
-    { name: '달', color: 0xC0C0C0, size: 0.3, points: 1 },
-    { name: '수성', color: 0x8C7853, size: 0.4, points: 2 },
-    { name: '금성', color: 0xFFC649, size: 0.5, points: 4 },
-    { name: '지구', color: 0x6B93D6, size: 0.6, points: 8 },
-    { name: '화성', color: 0xCD5C5C, size: 0.7, points: 16 },
-    { name: '목성', color: 0xD8CA9D, size: 1.0, points: 32 },
-    { name: '토성', color: 0xFAD5A5, size: 1.2, points: 64 },
-    { name: '천왕성', color: 0x4FD0E7, size: 1.0, points: 128 },
-    { name: '해왕성', color: 0x4B70DD, size: 1.0, points: 256 },
-    { name: '태양', color: 0xFFD700, size: 1.5, points: 512 }
+    { name: '달', color: 0xC0C0C0, size: 0.3, points: 1, texture: 'moon.png' },
+    { name: '수성', color: 0x8C7853, size: 0.4, points: 2, texture: 'mercury.png' },
+    { name: '금성', color: 0xFFC649, size: 0.5, points: 4, texture: 'venus.png' },
+    { name: '지구', color: 0x6B93D6, size: 0.6, points: 8, texture: 'earth.png' },
+    { name: '화성', color: 0xCD5C5C, size: 0.7, points: 16, texture: 'mars.png' },
+    { name: '목성', color: 0xD8CA9D, size: 1.0, points: 32, texture: 'jupiter.png' },
+    { name: '토성', color: 0xFAD5A5, size: 1.2, points: 64, texture: 'saturn.png' },
+    { name: '천왕성', color: 0x4FD0E7, size: 1.0, points: 128, texture: 'uranus.png' },
+    { name: '해왕성', color: 0x4B70DD, size: 1.0, points: 256, texture: 'neptune.png' },
+    { name: '태양', color: 0xFFD700, size: 1.5, points: 512, texture: 'sun.png' }
 ];
+
+// 텍스처 로더
+const textureLoader = new THREE.TextureLoader();
 
 // 게임 영역 설정
 const GAME_AREA = {
     radius: GAME_CONFIG.areaSize, // 구체 반지름을 설정에서 가져오기
     height: GAME_CONFIG.areaSize * 2  // 높이도 설정에서 가져오기
 };
+
+/* 떨림 억제용 추가 상수  (박재현) */
+const DEAD_ZONE         = 0.15;   // 중앙 r < DEAD_ZONE 구간엔 중력 없음
+const SNAP_SPEED        = 0.03;   // |v| < SNAP_SPEED 이면 즉시 0으로 스냅
+const MAX_SPEED_SLEEP   = 8.0;    // 기존 maxSpeed 그대로 쓰도록 상수화
+const SLEEP_SPEED = 0.05; // |v| < 0.05 m/s 이면 강제 sleep
+
+// 배경음악 변수 추가 (박재현)
+let backgroundMusic;
+
+// 배경음악 초기화 함수 (박재현)
+function initBackgroundMusic() {
+    backgroundMusic = new Audio('sound/First_Step.mp3');
+    backgroundMusic.loop = true; // 반복 재생
+    backgroundMusic.volume = 1; // 볼륨 설정 (0.0 ~ 1.0) (박재현)
+}
+
+// 배경음악 시작 (박재현)
+function startBackgroundMusic() {
+    if (backgroundMusic) {
+        backgroundMusic.play().catch(error => {
+            console.log('배경음악 재생 실패:', error);
+        });
+    }
+}
+
+// 배경음악 정지 (박재현)
+function stopBackgroundMusic() {
+    if (backgroundMusic) {
+        backgroundMusic.pause();
+        backgroundMusic.currentTime = 0;
+    }
+}
 
 // 라이브러리 로딩 확인 및 초기화
 function checkLibrariesAndInit() {
@@ -124,12 +130,16 @@ function checkLibrariesAndInit() {
     
     console.log('모든 라이브러리 로드 완료. 게임 초기화 시작...');
     init();
+    startBackgroundMusic(); // 게임 시작 시 배경음악 시작 (박재현)
 }
 
 // 초기화
 function init() {
     try {
         console.log('게임 초기화 시작...');
+        
+        // 배경음악 초기화 (박재현)
+        initBackgroundMusic();
         
         // Three.js 설정
         scene = new THREE.Scene();
@@ -249,8 +259,19 @@ function createAimingPlanet() {
     const planetData = PLANET_TYPES[nextPlanetType];
     
     const geometry = new THREE.SphereGeometry(planetData.size, 16, 16);
+    
+    // 텍스처 로드 및 적용
+    const texture = textureLoader.load(
+        `textures/${planetData.texture}`,
+        undefined,
+        (error) => {
+            console.warn(`조준용 행성 텍스처 로드 실패 (${planetData.texture}):`, error);
+            material.color.setHex(planetData.color);
+        }
+    );
+    
     const material = new THREE.MeshPhongMaterial({ 
-        color: planetData.color,
+        map: texture,
         transparent: true,
         opacity: 0.8
     });
@@ -360,7 +381,9 @@ function updateTrajectory(startPos, velocity) {
 
 // 행성 발사 (카메라 기준 고정 위치에서 발사)
 function launchPlanet(direction, power) {
-    if (!gameRunning) return;
+    if (!gameRunning || isLaunching) return; // 이미 발사 중이면 리턴
+    
+    isLaunching = true; // 발사 시작
     
     // 카메라 기준 좌표계 설정
     const cameraDirection = new THREE.Vector3(
@@ -398,11 +421,11 @@ function launchPlanet(direction, power) {
     }
     
     const velocity = worldDirection.clone().multiplyScalar(power);
-    
-    console.log(`행성 발사! 카메라 각도: ${(cameraAngle * 180 / Math.PI).toFixed(1)}°`);
-    console.log(`카메라 위치: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
-    console.log(`발사 위치: (${startPosition.x.toFixed(1)}, ${startPosition.y.toFixed(1)}, ${startPosition.z.toFixed(1)})`);
-    console.log(`발사 방향: (${worldDirection.x.toFixed(2)}, ${worldDirection.y.toFixed(2)}, ${worldDirection.z.toFixed(2)})`);
+    //(제거 예정)
+    //console.log(`행성 발사! 카메라 각도: ${(cameraAngle * 180 / Math.PI).toFixed(1)}°`);
+    //console.log(`카메라 위치: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
+    //console.log(`발사 위치: (${startPosition.x.toFixed(1)}, ${startPosition.y.toFixed(1)}, ${startPosition.z.toFixed(1)})`);
+    //console.log(`발사 방향: (${worldDirection.x.toFixed(2)}, ${worldDirection.y.toFixed(2)}, ${worldDirection.z.toFixed(2)})`);
     
     const newPlanet = createPlanet(nextPlanetType, startPosition);
     newPlanet.body.velocity.copy(new CANNON.Vec3(velocity.x, velocity.y, velocity.z));
@@ -413,6 +436,11 @@ function launchPlanet(direction, power) {
     
     // 궤적 라인 숨기기
     trajectoryLine.visible = false;
+    
+    // 발사 완료 후 상태 초기화 (약간의 지연 후)
+    setTimeout(() => {
+        isLaunching = false;
+    }, 500);
 }
 
 // 조준용 행성 업데이트
@@ -426,9 +454,8 @@ function updateAimingPlanet() {
 // 테스트용 초기 행성들 생성 (게임 영역 내부에)
 function createTestPlanets() {
     // 중앙에 몇 개의 행성을 미리 배치해서 게임이 제대로 작동하는지 확인
-    createPlanet(0, new THREE.Vector3(0, -1, 0)); // 달
-    createPlanet(1, new THREE.Vector3(1, -1, 0)); // 수성
-    createPlanet(0, new THREE.Vector3(-1, -1, 0)); // 달
+    // 이러면 처음에 행성 3개가 생성되고 합쳐지는건데, 그냥 1개로 합침. (박재현)
+    createPlanet(4, new THREE.Vector3(0, 0, 0)); // 화성 ( 박재현)
 }
 
 // 게임 영역 생성 (더 명확한 구체)
@@ -513,15 +540,35 @@ function setNextPlanet() {
 function updatePlanetPreview() {
     const preview = document.getElementById('planetPreview');
     const planetData = PLANET_TYPES[nextPlanetType];
-    preview.style.backgroundColor = `#${planetData.color.toString(16).padStart(6, '0')}`;
-    preview.title = planetData.name;
+    
+    // 기존 내용 제거
+    preview.innerHTML = '';
+    
+    // 원형 배경 생성
+    const circle = document.createElement('div');
+    circle.style.width = '100%';
+    circle.style.height = '100%';
+    circle.style.borderRadius = '50%';
+    circle.style.overflow = 'hidden';
+    circle.style.backgroundColor = `#${planetData.color.toString(16).padStart(6, '0')}`;
+    circle.title = planetData.name;
+    
+    // 행성 이미지 추가
+    const img = document.createElement('img');
+    img.src = `textures/${planetData.texture}`;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'cover';
+    
+    circle.appendChild(img);
+    preview.appendChild(circle);
 }
 
 // 이벤트 리스너 설정 (드래그 시스템)
 function setupEventListeners() {
     // 마우스 다운 (드래그 시작)
     renderer.domElement.addEventListener('mousedown', (event) => {
-        if (!gameRunning) return;
+        if (!gameRunning || !canDrag) return;
         
         isDragging = true;
         dragStart.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -547,11 +594,18 @@ function setupEventListeners() {
             // 드래그 벡터 계산
             const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
             const rawPower = dragVector.length() * 10;
-            launchPower = Math.min(rawPower, GAME_CONFIG.maxPower); // 설정에서 최대 파워 가져오기
+            
+            // 파워 계산 로직 수정 (박재현)
+            // 실제 파워는 최대 파워의 50%까지만 사용
+            const maxDragPower = GAME_CONFIG.maxPower * 0.5;
+            const actualPower = Math.min(rawPower, maxDragPower);
+            
+            // 파워 게이지 표시는 100% 스케일로 보여줌 (박재현)
+            launchPower = actualPower * 2;
             
             // 디버깅: 파워 계산 로그
             if (Math.floor(Date.now() / 500) % 2 === 0) { // 0.5초마다 로그 출력 (너무 많은 로그 방지)
-                console.log(`🎯 발사 파워: 원시값 ${rawPower.toFixed(1)} → 제한값 ${launchPower.toFixed(1)} (최대: ${GAME_CONFIG.maxPower})`);
+                console.log(`🎯 발사 파워: 원시값 ${rawPower.toFixed(1)} → 실제값 ${actualPower.toFixed(1)} → 표시값 ${launchPower.toFixed(1)} (최대: ${GAME_CONFIG.maxPower})`);
             }
             
             // 발사 방향 계산 (드래그 반대 방향)
@@ -642,49 +696,60 @@ function setupEventListeners() {
             const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
             const direction = new THREE.Vector3(-dragVector.x, -dragVector.y, -1).normalize();
             
-            launchPlanet(direction, launchPower);
-        }
-        
-        // 조준용 행성을 원래 위치로 되돌리기
-        if (aimingPlanet) {
-            const cameraDirection = new THREE.Vector3(
-                Math.sin(cameraAngle),
-                0,
-                Math.cos(cameraAngle)
-            ).normalize();
+            // 실제 발사 파워는 표시된 파워의 절반으로 설정 (박재현)
+            const actualLaunchPower = launchPower * 0.5;
             
-            const upVector = new THREE.Vector3(0, 1, 0);
+            // 드래그 불가능 상태로 설정 (박재현)
+            canDrag = false;
             
-            const launchOffset = new THREE.Vector3()
-                .addScaledVector(cameraDirection, -3) // 카메라에서 3만큼 앞쪽
-                .addScaledVector(upVector, -2); // 아래쪽 2만큼
+            // 1초 후 드래그 가능 상태로 복구 (박재현)
+            setTimeout(() => {
+                canDrag = true;
+                console.log('드래그 가능 상태로 복구');
+            }, 1000);
             
-            const aimingPosition = camera.position.clone().add(launchOffset);
-            aimingPlanet.position.copy(aimingPosition);
+            launchPlanet(direction, actualLaunchPower);
             
-            // 크기도 원래대로 되돌리기
-            aimingPlanet.scale.setScalar(1);
+            // 조준용 행성을 원래 위치로 되돌리기
+            if (aimingPlanet) {
+                const cameraDirection = new THREE.Vector3(
+                    Math.sin(cameraAngle),
+                    0,
+                    Math.cos(cameraAngle)
+                ).normalize();
+                
+                const upVector = new THREE.Vector3(0, 1, 0);
+                
+                const launchOffset = new THREE.Vector3()
+                    .addScaledVector(cameraDirection, -3) // 카메라에서 3만큼 앞쪽
+                    .addScaledVector(upVector, -2); // 아래쪽 2만큼
+                
+                const aimingPosition = camera.position.clone().add(launchOffset);
+                aimingPlanet.position.copy(aimingPosition);
+                
+                // 크기도 원래대로 되돌리기
+                aimingPlanet.scale.setScalar(1);
+            }
+            
+            // 궤적 라인 숨기기
+            trajectoryLine.visible = false;
+            
+            // UI 업데이트
+            if (window.showTrajectoryInfo) {
+                window.showTrajectoryInfo(false);
+            }
+            if (window.updatePowerMeter) {
+                window.updatePowerMeter(0);
+            }
+            
+            console.log('드래그 종료, 발사!');
         }
-        
-        // 궤적 라인 숨기기
-        trajectoryLine.visible = false;
-        
-        // UI 업데이트
-        if (window.showTrajectoryInfo) {
-            window.showTrajectoryInfo(false);
-        }
-        if (window.updatePowerMeter) {
-            window.updatePowerMeter(0);
-        }
-        
-        console.log('드래그 종료, 발사!');
     });
     
     // 키보드 이벤트 (부드러운 카메라 움직임)
     window.addEventListener('keydown', (event) => {
         if (event.key === ' ') { // 스페이스바로 직진 발사
-            const direction = new THREE.Vector3(0, 0, -1);
-            launchPlanet(direction, 8);
+            launchStraightPlanet();
         }
         
         // 키 눌림 상태 추가
@@ -711,8 +776,21 @@ function createPlanet(type, position) {
     
     // Three.js 메시
     const geometry = new THREE.SphereGeometry(planetData.size, 32, 32);
+    
+    // 텍스처 로드 및 적용
+    const texture = textureLoader.load(
+        `textures/${planetData.texture}`,
+        // 성공 콜백
+        undefined,
+        // 에러 콜백
+        (error) => {
+            console.warn(`텍스처 로드 실패 (${planetData.texture}):`, error);
+            // 텍스처 로드 실패 시 기본 색상 사용
+            material.color.setHex(planetData.color);
+        }
+    );
     const material = new THREE.MeshPhongMaterial({ 
-        color: planetData.color,
+        map: texture,
         shininess: 30
     });
     
@@ -774,6 +852,16 @@ function createPlanet(type, position) {
     body.material = new CANNON.Material();
     body.material.restitution = 0.1; // 반발력을 0.4에서 0.1로 크게 감소
     body.material.friction = 0.8; // 마찰력 증가로 안정성 향상
+    
+    /*  떨림 방지 속성 추가 (박재현)  */
+    body.linearDamping   = 0.2;   // 남은 직선 속도 빨리 감쇠
+    body.angularDamping  = 0.2;   // 남은 회전 속도 빨리 감쇠
+    body.allowSleep      = true;  // 느려지면 계산 제외
+    body.sleepSpeedLimit = 0.05;  // |v| < 0.05 m/s 이면
+    body.sleepTimeLimit  = 0.5;   // 0.5초 지속되면 sleep
+    body.linearDamping  = 0.4;   // 0.2 → 0.4   더 빨리 속도 죽임
+    body.angularDamping = 0.4;
+    /* 여기까지.*/
     
     const planet = {
         type: type,
@@ -970,8 +1058,8 @@ function mergePlanets(planet1, planet2) {
         newPlanet.body.force.z -= (newPosition.z / centerDistance) * pullForce;
     }
     
-    // 합치기 효과
-    createMergeEffect(newPosition);
+    // 합치기 효과 (새로 생성되는 행성의 레벨 전달)
+    createMergeEffect(newPosition, newType);
     
     // UI 업데이트
     updateUI();
@@ -1029,62 +1117,411 @@ function removePlanet(planet) {
     }
 }
 
-// 합치기 효과 (개선된 버전)
-function createMergeEffect(position) {
-    const geometry = new THREE.SphereGeometry(0.1, 8, 8);
+// 우주 파동 합치기 효과 (멋진 3D 버전) - 레벨 스케일링
+function createMergeEffect(position, planetLevel = 0) {
+    console.log('🌟 Merge 효과 시작! 위치:', position, '레벨:', planetLevel);
     
-    for (let i = 0; i < 15; i++) {
+    // 행성 레벨에 따른 스케일 계산 (레벨이 높을수록 더 큰 효과)
+    const scale = (1 + (planetLevel * 0.6)) * 0.12; // 레벨당 50% 증가
+    const intensity = (1 + (planetLevel * 0.3)) * 1; // 레벨당 30% 강도 증가
+    
+    // 행성 타입에 따른 색상 가져오기
+    const planetData = PLANET_TYPES[planetLevel] || PLANET_TYPES[0];
+    const planetColor = new THREE.Color(planetData.color);
+
+    console.log('📏 효과 스케일:', scale, '강도:', intensity, '색상:', planetData.name, planetColor.getHexString());
+    
+    // 1. 중심 폭발 빛 효과
+    createCentralExplosion(position, scale, intensity, planetColor);
+    
+    // 2. 파동 링 효과 (여러 겹)
+    createShockwaveRings(position, scale, intensity, planetColor);
+    
+    // 3. 나선 파티클 효과
+    createSpiralParticles(position, scale, intensity, planetColor);
+    
+    // 4. 별빛 흩어짐 효과
+    createStarBurst(position, scale, intensity, planetColor);
+    
+    // 5. 공간 왜곡 효과
+    // createSpaceDistortion(position);
+    
+    // 소리 효과 (더 우주적인 소리)
+    // playCosmicSound();
+}
+
+// 중심 폭발 빛 효과 (행성 색상) - 스케일링
+function createCentralExplosion(position, scale = 1, intensity = 1, planetColor = new THREE.Color(0xffffff)) {
+    console.log('💥 중심 폭발 효과 생성 중... 스케일:', scale, '강도:', intensity, '색상:', planetColor.getHexString());
+    
+    const geometry = new THREE.SphereGeometry(0.5 * scale, 16, 16);
+    const material = new THREE.MeshBasicMaterial({ 
+        color: planetColor.clone(),
+        transparent: true,
+        opacity: 1.0 * intensity
+    });
+    
+    const explosion = new THREE.Mesh(geometry, material);
+    explosion.position.copy(position);
+    scene.add(explosion);
+    console.log('💥 중심 폭발 생성 완료, 위치:', explosion.position, '크기:', geometry.parameters.radius);
+    
+    // 중심 폭발 애니메이션
+    const duration = (1000 + (scale - 1) * 500) * 0.5; // 스케일에 따라 지속시간 증가
+    const startTime = Date.now();
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = elapsed / duration;
+        
+        if (progress < 1) {
+            // 빠르게 커졌다가 서서히 사라짐 (스케일에 비례)
+            const maxScale = 15 * scale;
+            const currentScale = progress < 0.2 ? progress * maxScale : (3 * scale) - (progress * 2 * scale);
+            explosion.scale.setScalar(Math.max(0.1, currentScale));
+            
+            // 행성 색상에 따른 밝기 변화 (밝게 -> 어둡게)
+            const brightness = (1 - progress * 0.8) * intensity;
+            const currentColor = planetColor.clone().multiplyScalar(brightness);
+            explosion.material.color.copy(currentColor);
+            
+            explosion.material.opacity = Math.max(0, (1 - progress) * intensity);
+            
+            requestAnimationFrame(animate);
+        } else {
+            console.log('💥 중심 폭발 제거');
+            scene.remove(explosion);
+            explosion.geometry.dispose();
+            explosion.material.dispose();
+        }
+    };
+    animate();
+}
+
+// 파동 링 효과 (한 겹, 선명한 그라데이션, 행성 색상) - 스케일링 버전
+function createShockwaveRings(position, scale = 1, intensity = 1, planetColor = new THREE.Color(0xffffff)) {
+    console.log('🌊 파동 링 효과 생성 중... 스케일:', scale, '강도:', intensity, '색상:', planetColor.getHexString());
+    
+    // 간단한 링 메시 생성 (스케일에 비례)
+    const innerRadius = 0.3 * scale;
+    const outerRadius = 1.0 * scale;
+    const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({ 
+        color: planetColor.clone(),
+        transparent: true,
+        opacity: 0.8 * intensity,
+        side: THREE.DoubleSide
+    });
+    
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.copy(position);
+    
+    // XY 평면에 수평으로 배치
+    ring.rotation.x = -Math.PI / 2;
+    
+    scene.add(ring);
+    console.log('🌊 파동 링 생성 완료, 위치:', ring.position, '내부반지름:', innerRadius, '외부반지름:', outerRadius);
+    
+    // 링 확산 애니메이션 (스케일에 따라 지속시간과 최대 크기 조정)
+    const duration = (3000 + (scale - 1) * 1000) * 0.5; // 스케일에 따라 지속시간 증가
+    const maxExpansion = 20 * scale; // 최대 확장 크기도 스케일에 비례
+    
+    const startTime = Date.now();
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = elapsed / duration;
+        
+        if (progress < 1) {
+            // 크기 확장 (스케일에 비례)
+            const currentScale = 1 + progress * maxExpansion;
+            ring.scale.setScalar(currentScale);
+            
+            // 투명도 변화
+            const fadeStart = 0.3; // 30% 지점부터 페이드 시작
+            let opacity;
+            if (progress < fadeStart) {
+                opacity = 0.8 * intensity;
+            } else {
+                opacity = 0.8 * intensity * (1 - ((progress - fadeStart) / (1.0 - fadeStart)));
+            }
+            ring.material.opacity = opacity;
+            
+            // 색상 변화 (행성 색상 기반으로 밝기 변화)
+            const brightness = (1 - progress * 0.5) * intensity;
+            const currentColor = planetColor.clone().multiplyScalar(brightness);
+            ring.material.color.copy(currentColor);
+            
+            // 미세한 회전 효과 (스케일에 따라 속도 조정)
+            ring.rotation.z += 0.01 / scale;
+            
+            requestAnimationFrame(animate);
+        } else {
+            console.log('🌊 파동 링 제거');
+            scene.remove(ring);
+            ring.geometry.dispose();
+            ring.material.dispose();
+        }
+    };
+    animate();
+}
+
+// 나선 파티클 효과 (행성 색상) - 스케일링
+function createSpiralParticles(position, scale = 1, intensity = 1, planetColor = new THREE.Color(0xffffff)) {
+    console.log('🌀 나선 파티클 효과 생성 중... 스케일:', scale, '강도:', intensity, '색상:', planetColor.getHexString());
+    
+    const particleCount = Math.floor(20 * scale); // 파티클 수도 스케일에 비례
+    const particles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        const geometry = new THREE.SphereGeometry(0.1 * scale, 8, 8); // 크기 스케일링
+        
+        // 행성 색상 기반 밝기 그라데이션
+        const brightness = (0.8 - (i / particleCount) * 0.3) * intensity;
+        const particleColor = planetColor.clone().multiplyScalar(brightness);
         const material = new THREE.MeshBasicMaterial({ 
-            color: new THREE.Color().setHSL(Math.random(), 1, 0.5),
+            color: particleColor,
             transparent: true,
             opacity: 1
         });
         
         const particle = new THREE.Mesh(geometry, material);
         particle.position.copy(position);
-        particle.position.add(new THREE.Vector3(
+        scene.add(particle);
+        
+        particles.push({
+            mesh: particle,
+            angle: (i / particleCount) * Math.PI * 2, // 1바퀴 나선
+            radius: 0,
+            height: 0,
+            speed: (0.08 + Math.random() * 0.05) * scale, // 속도도 스케일에 비례
+            brightness: brightness,
+            baseColor: particleColor.clone()
+        });
+    }
+    
+    console.log('🌀 나선 파티클 생성 완료, 개수:', particles.length, '파티클 크기:', 0.1 * scale);
+    
+    // 나선 애니메이션 (스케일에 따라 지속시간 조정)
+    const duration = 2500 + (scale - 1) * 1000; // 스케일에 따라 지속시간 증가
+    const startTime = Date.now();
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = elapsed / duration;
+        
+        if (progress < 1) {
+            particles.forEach((particle, index) => {
+                // 나선형으로 퍼져나감
+                particle.radius += particle.speed;
+                particle.height += particle.speed * 0.2;
+                particle.angle += 0.05;
+                
+                // 나선 위치 계산
+                const x = position.x + Math.cos(particle.angle) * particle.radius;
+                const y = position.y + particle.height * (index % 2 === 0 ? 1 : -1);
+                const z = position.z + Math.sin(particle.angle) * particle.radius;
+                
+                particle.mesh.position.set(x, y, z);
+                particle.mesh.material.opacity = Math.max(0, 1 - progress);
+                
+                // 파티클 크기 변화 (스케일에 비례)
+                const currentScale = 1 + progress * 1.5 * scale;
+                particle.mesh.scale.setScalar(currentScale);
+                
+                // 밝기도 점진적으로 감소 (행성 색상 기반)
+                const currentBrightness = particle.brightness * (1 - progress * 0.3);
+                const currentColor = particle.baseColor.clone().multiplyScalar(currentBrightness / particle.brightness);
+                particle.mesh.material.color.copy(currentColor);
+            });
+            
+            requestAnimationFrame(animate);
+        } else {
+            console.log('🌀 나선 파티클 제거');
+            particles.forEach(particle => {
+                scene.remove(particle.mesh);
+                particle.mesh.geometry.dispose();
+                particle.mesh.material.dispose();
+            });
+        }
+    };
+    animate();
+}
+
+// 별빛 흩어짐 효과 (행성 색상) - 스케일링
+function createStarBurst(position, scale = 1, intensity = 1, planetColor = new THREE.Color(0xffffff)) {
+    console.log('⭐ 별빛 흩어짐 효과 생성 중... 스케일:', scale, '강도:', intensity, '색상:', planetColor.getHexString());
+    
+    const starCount = Math.floor(15 * scale); // 별 개수도 스케일에 비례
+    const stars = [];
+    
+    for (let i = 0; i < starCount; i++) {
+        const geometry = new THREE.SphereGeometry(0.05 * scale, 6, 6); // 크기 스케일링
+        
+        // 각 별마다 밝기 (강도에 비례, 행성 색상 기반)
+        const brightness = (0.7 + Math.random() * 0.3) * intensity;
+        const starColor = planetColor.clone().multiplyScalar(brightness);
+        const material = new THREE.MeshBasicMaterial({ 
+            color: starColor,
+            transparent: true,
+            opacity: 1
+        });
+        
+        const star = new THREE.Mesh(geometry, material);
+        star.position.copy(position);
+        scene.add(star);
+        
+        // 랜덤한 방향으로 속도 설정 (스케일에 비례)
+        const direction = new THREE.Vector3(
             (Math.random() - 0.5) * 2,
             (Math.random() - 0.5) * 2,
             (Math.random() - 0.5) * 2
-        ));
-        scene.add(particle);
+        ).normalize();
         
-        // 애니메이션
-        const startTime = Date.now();
-        const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = elapsed / 1000;
-            
-            if (progress < 1) {
-                particle.material.opacity = 1 - progress;
-                particle.scale.setScalar(1 + progress * 2);
-                requestAnimationFrame(animate);
-            } else {
-                scene.remove(particle);
-            }
-        };
-        animate();
+        stars.push({
+            mesh: star,
+            velocity: direction.multiplyScalar((0.15 + Math.random() * 0.1) * scale),
+            life: 1.0,
+            originalBrightness: brightness,
+            baseColor: starColor.clone()
+        });
     }
     
-    // 소리 효과 (웹 오디오 API 사용)
+    console.log('⭐ 별빛 생성 완료, 개수:', stars.length, '별 크기:', 0.05 * scale);
+    
+    // 별 흩어짐 애니메이션 (스케일에 따라 생명력 감소 속도 조정)
+    const lifeDecay = 0.015 / scale; // 큰 스케일일수록 더 오래 지속
+    
+    const animate = () => {
+        let activeStars = 0;
+        
+        stars.forEach(star => {
+            if (star.life > 0) {
+                activeStars++;
+                
+                // 위치 업데이트
+                star.mesh.position.add(star.velocity);
+                
+                // 생명력 감소 (스케일에 따라 조정)
+                star.life -= lifeDecay;
+                star.mesh.material.opacity = Math.max(0, star.life);
+                
+                // 중력의 영향으로 속도 조금씩 감소
+                star.velocity.multiplyScalar(0.99);
+                
+                // 별이 깜빡이는 효과 (스케일에 비례)
+                const flicker = 0.8 + Math.sin(Date.now() * 0.008 + star.mesh.id) * 0.2;
+                star.mesh.scale.setScalar(flicker * scale);
+                
+                // 생명력에 따른 밝기 감소 (행성 색상 기반)
+                const currentBrightness = star.originalBrightness * star.life;
+                const currentColor = star.baseColor.clone().multiplyScalar(star.life);
+                star.mesh.material.color.copy(currentColor);
+            }
+        });
+        
+        if (activeStars > 0) {
+            requestAnimationFrame(animate);
+        } else {
+            console.log('⭐ 별빛 제거');
+            stars.forEach(star => {
+                scene.remove(star.mesh);
+                star.mesh.geometry.dispose();
+                star.mesh.material.dispose();
+            });
+        }
+    };
+    animate();
+}
+
+// 공간 왜곡 효과
+function createSpaceDistortion(position) {
+    const distortionGeometry = new THREE.SphereGeometry(1, 32, 32);
+    const distortionMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x4400ff,
+        transparent: true,
+        opacity: 0.1,
+        wireframe: true
+    });
+    
+    const distortion = new THREE.Mesh(distortionGeometry, distortionMaterial);
+    distortion.position.copy(position);
+    scene.add(distortion);
+    
+    // 왜곡 애니메이션
+    const startTime = Date.now();
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = elapsed / 1200; // 1.2초
+        
+        if (progress < 1) {
+            // 불규칙한 크기 변화로 공간 왜곡 표현
+            const waveX = 1 + Math.sin(progress * Math.PI * 4) * 0.3;
+            const waveY = 1 + Math.cos(progress * Math.PI * 6) * 0.2;
+            const waveZ = 1 + Math.sin(progress * Math.PI * 8) * 0.25;
+            
+            distortion.scale.set(waveX * (1 + progress * 3), waveY * (1 + progress * 3), waveZ * (1 + progress * 3));
+            distortion.material.opacity = 0.1 * (1 - progress);
+            
+            // 회전 효과
+            distortion.rotation.x += 0.05;
+            distortion.rotation.y += 0.03;
+            
+            requestAnimationFrame(animate);
+        } else {
+            scene.remove(distortion);
+        }
+    };
+    animate();
+}
+
+// 우주적인 사운드 효과
+function playCosmicSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        // 메인 톤 (저음)
+        const mainOsc = audioContext.createOscillator();
+        const mainGain = audioContext.createGain();
+        mainOsc.connect(mainGain);
+        mainGain.connect(audioContext.destination);
         
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+        mainOsc.frequency.setValueAtTime(200, audioContext.currentTime);
+        mainOsc.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 1.0);
+        mainGain.gain.setValueAtTime(0.15, audioContext.currentTime);
+        mainGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.0);
         
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        // 하모닉 톤 (중음)
+        const harmOsc = audioContext.createOscillator();
+        const harmGain = audioContext.createGain();
+        harmOsc.connect(harmGain);
+        harmGain.connect(audioContext.destination);
         
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
+        harmOsc.frequency.setValueAtTime(400, audioContext.currentTime);
+        harmOsc.frequency.exponentialRampToValueAtTime(160, audioContext.currentTime + 0.8);
+        harmGain.gain.setValueAtTime(0.1, audioContext.currentTime);
+        harmGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+        
+        // 고음 반짝임
+        const sparkleOsc = audioContext.createOscillator();
+        const sparkleGain = audioContext.createGain();
+        sparkleOsc.connect(sparkleGain);
+        sparkleGain.connect(audioContext.destination);
+        
+        sparkleOsc.frequency.setValueAtTime(1200, audioContext.currentTime);
+        sparkleOsc.frequency.exponentialRampToValueAtTime(2400, audioContext.currentTime + 0.3);
+        sparkleGain.gain.setValueAtTime(0.08, audioContext.currentTime);
+        sparkleGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        // 모든 오실레이터 시작
+        mainOsc.start(audioContext.currentTime);
+        harmOsc.start(audioContext.currentTime);
+        sparkleOsc.start(audioContext.currentTime);
+        
+        // 정리
+        mainOsc.stop(audioContext.currentTime + 1.0);
+        harmOsc.stop(audioContext.currentTime + 0.8);
+        sparkleOsc.stop(audioContext.currentTime + 0.5);
+        
     } catch (e) {
-        // 오디오 지원하지 않는 브라우저에서는 무시
+        console.log('오디오 효과 재생 실패:', e);
     }
 }
 
@@ -1168,14 +1605,17 @@ function checkGameOver() {
 // 게임 오버
 function gameOver() {
     gameRunning = false;
+    stopBackgroundMusic(); // 배경음악 정지 (박재현)
     
     if (score > bestScore) {
         bestScore = score;
         localStorage.setItem('sputnika3d-best', bestScore);
     }
     
-    document.getElementById('finalScore').textContent = score;
-    document.getElementById('gameOver').style.display = 'block';
+    const gameOverScreen = document.getElementById('gameOver');
+    const finalScore = document.getElementById('finalScore');
+    finalScore.textContent = score;
+    gameOverScreen.style.display = 'block';
 }
 
 // 게임 재시작
@@ -1220,6 +1660,9 @@ function restartGame() {
     console.log(`🎮 게임 재시작 완료: 새 행성 수 ${planets.length}`);
     
     document.getElementById('gameOver').style.display = 'none';
+    
+    // 배경음악 재시작 (박재현)
+    startBackgroundMusic();
 }
 
 // UI 업데이트
@@ -1238,6 +1681,7 @@ function animate() {
     // 중앙으로 끌어당기는 중력 적용
     if (gameRunning) {
         applyCentralGravity();
+        stabilisePlanets();   // 떨림 억제 (박재현)
     }
     
     // 물리 시뮬레이션 업데이트
@@ -1343,8 +1787,69 @@ function updateCameraMovement() {
     }
 }
 
+/* 떨림 억제용 보정(박재현) */
+function stabilisePlanets() {
+    planets.forEach(planet => {
+        // 1) Dead-zone : 중심 아주 근처면 힘 제거
+        const pos   = planet.body.position;
+        const dist2 = pos.x*pos.x + pos.y*pos.y + pos.z*pos.z;
+        if (dist2 < DEAD_ZONE * DEAD_ZONE) {           // r < DEAD_ZONE
+            planet.body.force.set(0, 0, 0);
+        }
+
+        // 2) 저속 스냅 : 미세 진동 제거
+        const v       = planet.body.velocity;
+        const speed2  = v.x*v.x + v.y*v.y + v.z*v.z;
+        if (speed2 < SNAP_SPEED * SNAP_SPEED) {        // |v| < SNAP_SPEED
+            v.set(0, 0, 0);
+            planet.body.angularVelocity.set(0, 0, 0);
+            planet.body.sleep();              // 강제 수면 (박재현)
+            planet.body.force.set(0, 0, 0);   // 잔여 힘 제거 (박재현   )
+        }
+    });
+}
+
+// 스페이스바 발사용 함수 추가
+function launchStraightPlanet() {
+    if (!gameRunning || isLaunching) return;
+    
+    isLaunching = true;
+    
+    // 카메라가 바라보는 방향으로 발사 방향 설정 (수정)
+    const cameraDirection = new THREE.Vector3(
+        -Math.sin(cameraAngle),  // 부호 반전
+        0,
+        -Math.cos(cameraAngle)   // 부호 반전
+    ).normalize();
+    
+    // 카메라 기준 고정 발사 위치
+    const launchOffset = new THREE.Vector3()
+        .addScaledVector(cameraDirection, -3)
+        .addScaledVector(new THREE.Vector3(0, 1, 0), -2);
+    
+    const startPosition = camera.position.clone().add(launchOffset);
+    
+    // 새로운 행성 생성
+    const newPlanet = createPlanet(nextPlanetType, startPosition);
+    
+    // 직선 속도 설정 (중력의 영향을 받지 않도록 충분히 빠른 속도로)
+    const straightVelocity = cameraDirection.clone().multiplyScalar(15);
+    newPlanet.body.velocity.copy(new CANNON.Vec3(straightVelocity.x, straightVelocity.y, straightVelocity.z));
+    
+    // 다음 행성 설정
+    setNextPlanet();
+    updateAimingPlanet();
+    
+    // 발사 완료 후 상태 초기화
+    setTimeout(() => {
+        isLaunching = false;
+    }, 500);
+}
+
 // 게임 시작 (라이브러리 로딩 확인 후)
-window.addEventListener('load', () => {
-    console.log('페이지 로드 완료. 라이브러리 확인 시작...');
-    setTimeout(checkLibrariesAndInit, 100); // 약간의 지연 후 확인
-}); 
+//window.addEventListener('load', () => {
+    //console.log('페이지 로드 완료. 라이브러리 확인 시작...');
+    //setTimeout(checkLibrariesAndInit, 100); // 약간의 지연 후 확인
+//}); 
+
+// -> 게임 시작은, 스타트 버튼 1번만 누르고 되어야 함.

@@ -484,6 +484,87 @@ function createGameArea() {
     scene.add(floor);
 }
 
+// 중력장 색상 업데이트 (위험도에 따라 붉은색으로 변화)
+function updateGravityFieldColor() {
+    if (!gameArea || planets.length === 0) return;
+    
+    // 충돌한 적이 있는 행성들 중에서 중심으로부터 가장 먼 거리 찾기
+    let maxDistance = 0;
+    let hasCollidedPlanets = false;
+    
+    planets.forEach(planet => {
+        // 충돌한 적이 있는 행성만 고려
+        if (planet.hasCollided) {
+            hasCollidedPlanets = true;
+            const distance = planet.mesh.position.distanceTo(new THREE.Vector3(0, 0, 0));
+            if (distance > maxDistance) {
+                maxDistance = distance;
+            }
+        }
+    });
+    
+    // 충돌한 행성이 없으면 경고 시스템 비활성화
+    if (!hasCollidedPlanets) {
+        gameArea.material.color.copy(new THREE.Color(0x00ffff));
+        gameArea.material.opacity = 0.2;
+        return;
+    }
+    
+    const gravityFieldRadius = GAME_CONFIG.areaSize;
+    const warningThreshold = gravityFieldRadius * 0.7; // 70%부터 경고 시작
+    const dangerThreshold = gravityFieldRadius * 0.9;  // 90%부터 위험 레벨
+    
+    // 기본 색상 (시안색)
+    const normalColor = new THREE.Color(0x00ffff);
+    // 경고 색상 (주황색)
+    const warningColor = new THREE.Color(0xff8800);
+    // 위험 색상 (빨간색)
+    const dangerColor = new THREE.Color(0xff0000);
+    
+    let targetColor = normalColor.clone();
+    let warningLevel = 0; // 0: 안전, 1: 완전 위험
+    
+    if (maxDistance > warningThreshold) {
+        if (maxDistance < dangerThreshold) {
+            // 경고 구역: 시안색 -> 주황색
+            const progress = (maxDistance - warningThreshold) / (dangerThreshold - warningThreshold);
+            targetColor = normalColor.clone().lerp(warningColor, progress);
+            warningLevel = progress * 0.5; // 0 ~ 0.5
+            console.log(`⚠️ 경고 구역: 거리 ${maxDistance.toFixed(2)}/${gravityFieldRadius.toFixed(2)}, 진행도 ${(progress * 100).toFixed(1)}%`);
+        } else {
+            // 위험 구역: 주황색 -> 빨간색
+            const progress = Math.min((maxDistance - dangerThreshold) / (gravityFieldRadius - dangerThreshold), 1);
+            targetColor = warningColor.clone().lerp(dangerColor, progress);
+            warningLevel = 0.5 + progress * 0.5; // 0.5 ~ 1.0
+            console.log(`🚨 위험 구역: 거리 ${maxDistance.toFixed(2)}/${gravityFieldRadius.toFixed(2)}, 진행도 ${(progress * 100).toFixed(1)}%`);
+        }
+        
+        // 중력장 색상 업데이트
+        gameArea.material.color.copy(targetColor);
+        
+        // 위험도에 따라 투명도도 조정 (더 선명하게)
+        const baseOpacity = 0.2;
+        const maxOpacity = 0.6;
+        gameArea.material.opacity = baseOpacity + (warningLevel * (maxOpacity - baseOpacity));
+        
+        // 위험할 때 깜빡이는 효과
+        if (warningLevel > 0.8) {
+            const pulseSpeed = 8.0; // 빠른 깜빡임
+            const pulse = Math.sin(Date.now() * 0.01 * pulseSpeed) * 0.3 + 0.7;
+            gameArea.material.opacity *= pulse;
+        } else if (warningLevel > 0.5) {
+            const pulseSpeed = 3.0; // 느린 깜빡임
+            const pulse = Math.sin(Date.now() * 0.01 * pulseSpeed) * 0.2 + 0.8;
+            gameArea.material.opacity *= pulse;
+        }
+        
+    } else {
+        // 안전 구역: 기본 색상과 투명도 복구
+        gameArea.material.color.copy(normalColor);
+        gameArea.material.opacity = 0.2;
+    }
+}
+
 // 조명 설정 (더 밝게)
 function setupLights() {
     const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
@@ -1155,7 +1236,7 @@ function createCentralExplosion(position, scale = 1, intensity = 1, planetColor 
     console.log('💥 중심 폭발 효과 생성 중... 스케일:', scale, '강도:', intensity, '색상:', planetColor.getHexString());
     
     const geometry = new THREE.SphereGeometry(0.5 * scale, 16, 16);
-    const material = new THREE.MeshBasicMaterial({ 
+        const material = new THREE.MeshBasicMaterial({ 
         color: planetColor.clone(),
         transparent: true,
         opacity: 1.0 * intensity
@@ -1446,12 +1527,12 @@ function createSpaceDistortion(position) {
     scene.add(distortion);
     
     // 왜곡 애니메이션
-    const startTime = Date.now();
-    const animate = () => {
-        const elapsed = Date.now() - startTime;
+        const startTime = Date.now();
+        const animate = () => {
+            const elapsed = Date.now() - startTime;
         const progress = elapsed / 1200; // 1.2초
-        
-        if (progress < 1) {
+            
+            if (progress < 1) {
             // 불규칙한 크기 변화로 공간 왜곡 표현
             const waveX = 1 + Math.sin(progress * Math.PI * 4) * 0.3;
             const waveY = 1 + Math.cos(progress * Math.PI * 6) * 0.2;
@@ -1464,14 +1545,14 @@ function createSpaceDistortion(position) {
             distortion.rotation.x += 0.05;
             distortion.rotation.y += 0.03;
             
-            requestAnimationFrame(animate);
-        } else {
+                requestAnimationFrame(animate);
+            } else {
             scene.remove(distortion);
-        }
-    };
-    animate();
-}
-
+            }
+        };
+        animate();
+    }
+    
 // 우주적인 사운드 효과
 function playCosmicSound() {
     try {
@@ -1579,7 +1660,7 @@ function checkGameOver() {
         // 중력장 내에서 충돌한 적이 있는 행성이 중력장 밖으로 나갔을 때 게임 오버
         if (planet.hasCollided && distance > gravityFieldRadius) {
             console.log(`🚨 게임 오버: 충돌한 행성 ${planet.data.name}이 중력장을 벗어남 (거리: ${distance.toFixed(2)} > 중력장: ${gravityFieldRadius})`);
-            gameOver();
+            gameOver(planet); // 위반 행성을 전달
             return;
         } else if (distance > warningDistance) {
             warningCount++;
@@ -1603,7 +1684,7 @@ function checkGameOver() {
 }
 
 // 게임 오버
-function gameOver() {
+function gameOver(violatingPlanet = null) {
     gameRunning = false;
     stopBackgroundMusic(); // 배경음악 정지 (박재현)
     
@@ -1612,10 +1693,234 @@ function gameOver() {
         localStorage.setItem('sputnika3d-best', bestScore);
     }
     
+    // 위반 행성이 있으면 클로즈업 애니메이션 실행
+    if (violatingPlanet) {
+        startGameOverCloseup(violatingPlanet);
+    } else {
+        // 위반 행성이 없으면 바로 게임 오버 화면 표시
+        showGameOverScreen();
+    }
+}
+
+// 게임 오버 화면 표시
+function showGameOverScreen() {
     const gameOverScreen = document.getElementById('gameOver');
     const finalScore = document.getElementById('finalScore');
     finalScore.textContent = score;
     gameOverScreen.style.display = 'block';
+}
+
+// 게임 오버 클로즈업 애니메이션
+function startGameOverCloseup(violatingPlanet) {
+    console.log(`🎬 게임 오버 클로즈업 시작: ${violatingPlanet.data.name}`);
+    
+    // 원래 카메라 상태 저장
+    const originalCameraPos = camera.position.clone();
+    const originalCameraAngle = cameraAngle;
+    const originalCameraHeight = cameraHeight;
+    const originalCameraDistance = cameraDistance;
+    
+    // 클로즈업 애니메이션 상태
+    let closeupProgress = 0;
+    const moveToTargetDuration = 1500; // 1.5초 동안 목표 위치로 이동
+    const orbitDuration = 1500; // 1.5초 동안 궤도 회전
+    const totalDuration = moveToTargetDuration + orbitDuration; // 총 3초
+    const startTime = Date.now();
+    
+    // 목표 카메라 위치 계산 (행성 주변)
+    const planetPos = violatingPlanet.mesh.position.clone();
+    const planetSize = violatingPlanet.data.size;
+    
+    // 행성 주변에서 좋은 각도 찾기
+    const offsetDistance = planetSize * 4; // 행성 크기의 4배 거리
+    const targetCameraPos = planetPos.clone().add(new THREE.Vector3(
+        offsetDistance * 0.7,  // 약간 옆에서
+        offsetDistance * 0.5,  // 약간 위에서
+        offsetDistance * 0.8   // 약간 뒤에서
+    ));
+    
+    // 클로즈업 효과를 위한 특별한 조명 추가
+    const spotLight = new THREE.SpotLight(0xff4444, 2, 0, Math.PI / 6, 0.5, 2);
+    spotLight.position.copy(targetCameraPos);
+    spotLight.target.position.copy(planetPos);
+    scene.add(spotLight);
+    scene.add(spotLight.target);
+    
+    // 클로즈업 애니메이션 함수
+    const animateCloseup = () => {
+        const elapsed = Date.now() - startTime;
+        closeupProgress = Math.min(elapsed / totalDuration, 1);
+        
+        if (closeupProgress < 1) {
+            if (elapsed < moveToTargetDuration) {
+                // 1단계: 목표 위치로 이동 (ease-out 트랜지션)
+                const moveProgress = elapsed / moveToTargetDuration;
+                
+                // ease-out 이징 함수 (부드럽게 감속하며 도착)
+                const easeOutProgress = 1 - Math.pow(1 - moveProgress, 3);
+                
+                // 카메라 위치 보간
+                camera.position.lerpVectors(originalCameraPos, targetCameraPos, easeOutProgress);
+                
+                // 카메라가 행성을 바라보도록 설정
+                camera.lookAt(planetPos);
+                
+            } else {
+                // 2단계: 목표 위치에서 궤도 회전
+                const orbitProgress = (elapsed - moveToTargetDuration) / orbitDuration;
+                
+                // 부드러운 이징 함수 (ease-in-out)
+                const easeOrbitProgress = orbitProgress < 0.5 
+                    ? 2 * orbitProgress * orbitProgress 
+                    : 1 - Math.pow(-2 * orbitProgress + 2, 3) / 2;
+                
+                // 행성 주변으로 천천히 회전하는 효과
+                const rotationAngle = easeOrbitProgress * Math.PI * 0.75; // 135도 회전 (더 역동적)
+                const rotatedPos = targetCameraPos.clone();
+                
+                // Y축 기준 회전
+                rotatedPos.x = targetCameraPos.x * Math.cos(rotationAngle) - targetCameraPos.z * Math.sin(rotationAngle);
+                rotatedPos.z = targetCameraPos.x * Math.sin(rotationAngle) + targetCameraPos.z * Math.cos(rotationAngle);
+                
+                // 약간의 높이 변화도 추가 (더 역동적인 움직임)
+                rotatedPos.y += Math.sin(rotationAngle) * offsetDistance * 0.3;
+                
+                camera.position.copy(rotatedPos);
+                camera.lookAt(planetPos);
+            }
+            
+            // 위반 행성을 강조하는 효과
+            if (violatingPlanet.mesh) {
+                // 행성 크기 살짝 키우기
+                const pulseScale = 1 + Math.sin(elapsed * 0.008) * 0.1;
+                violatingPlanet.mesh.scale.setScalar(pulseScale);
+                
+                // 행성 색상을 빨갛게 변경
+                if (violatingPlanet.mesh.material) {
+                    const redTint = new THREE.Color(1, 0.3, 0.3);
+                    violatingPlanet.mesh.material.color.copy(redTint);
+                    violatingPlanet.mesh.material.emissive.setHex(0x330000);
+                }
+            }
+            
+            // 스포트라이트 강도 조절
+            spotLight.intensity = 1 + Math.sin(elapsed * 0.01) * 0.5;
+            
+            requestAnimationFrame(animateCloseup);
+        } else {
+            // 클로즈업 완료 후 원래 위치로 복귀 시작
+            console.log('🎬 클로즈업 완료, 원래 위치로 복귀 시작');
+            
+            // 복귀 애니메이션 시작
+            startReturnToOriginalPosition(
+                violatingPlanet, 
+                spotLight, 
+                originalCameraPos, 
+                originalCameraAngle, 
+                originalCameraHeight, 
+                originalCameraDistance
+            );
+        }
+    };
+    
+    // 클로즈업 애니메이션 시작
+    animateCloseup();
+}
+
+// 원래 위치로 복귀하는 애니메이션
+function startReturnToOriginalPosition(violatingPlanet, spotLight, originalCameraPos, originalCameraAngle, originalCameraHeight, originalCameraDistance) {
+    console.log('🔄 원래 위치로 복귀 애니메이션 시작');
+    
+    // 현재 카메라 위치 저장
+    const currentCameraPos = camera.position.clone();
+    
+    // 복귀 애니메이션 상태
+    const returnDuration = 2000; // 2초 동안 복귀
+    const startTime = Date.now();
+    
+    // 복귀 애니메이션 함수
+    const animateReturn = () => {
+        const elapsed = Date.now() - startTime;
+        const returnProgress = Math.min(elapsed / returnDuration, 1);
+        
+        // ease-in-out 이징 함수 (부드럽게 시작해서 부드럽게 끝남)
+        const easeProgress = returnProgress < 0.5 
+            ? 2 * returnProgress * returnProgress 
+            : 1 - Math.pow(-2 * returnProgress + 2, 3) / 2;
+        
+        if (returnProgress < 1) {
+            // 카메라 위치를 부드럽게 원래 위치로 복귀
+            camera.position.lerpVectors(currentCameraPos, originalCameraPos, easeProgress);
+            
+            // 시선도 부드럽게 중앙으로 복귀
+            const currentLookAt = violatingPlanet.mesh.position.clone();
+            const targetLookAt = new THREE.Vector3(0, 0, 0);
+            const lerpedLookAt = currentLookAt.lerp(targetLookAt, easeProgress);
+            camera.lookAt(lerpedLookAt);
+            
+            // 행성 효과도 점진적으로 제거
+            if (violatingPlanet.mesh) {
+                // 크기 효과 점진적 제거
+                const pulseScale = 1 + Math.sin(elapsed * 0.008) * 0.1 * (1 - easeProgress);
+                violatingPlanet.mesh.scale.setScalar(pulseScale);
+                
+                // 색상 효과 점진적 제거
+                if (violatingPlanet.mesh.material) {
+                    const redTint = new THREE.Color(1, 0.3 + easeProgress * 0.7, 0.3 + easeProgress * 0.7);
+                    violatingPlanet.mesh.material.color.copy(redTint);
+                    
+                    const emissiveIntensity = 0x330000 * (1 - easeProgress);
+                    violatingPlanet.mesh.material.emissive.setHex(emissiveIntensity);
+                }
+            }
+            
+            // 스포트라이트 강도도 점진적으로 감소
+            if (spotLight) {
+                const baseIntensity = 1 + Math.sin(elapsed * 0.01) * 0.5;
+                spotLight.intensity = baseIntensity * (1 - easeProgress);
+            }
+            
+            requestAnimationFrame(animateReturn);
+        } else {
+            // 복귀 완료 후 정리
+            console.log('🔄 복귀 애니메이션 완료');
+            
+            // 스포트라이트 제거
+            if (spotLight) {
+                scene.remove(spotLight);
+                scene.remove(spotLight.target);
+            }
+            
+            // 행성 효과 완전 제거
+            if (violatingPlanet.mesh) {
+                violatingPlanet.mesh.scale.setScalar(1);
+                if (violatingPlanet.mesh.material) {
+                    violatingPlanet.mesh.material.emissive.setHex(0x000000);
+                    // 원래 색상으로 복구 (텍스처가 있다면 텍스처 색상, 없다면 기본 색상)
+                    if (violatingPlanet.mesh.material.map) {
+                        violatingPlanet.mesh.material.color.setHex(0xffffff);
+                    } else {
+                        violatingPlanet.mesh.material.color.setHex(violatingPlanet.data.color);
+                    }
+                }
+            }
+            
+            // 카메라 상태 완전 복구
+            camera.position.copy(originalCameraPos);
+            cameraAngle = originalCameraAngle;
+            cameraHeight = originalCameraHeight;
+            cameraDistance = originalCameraDistance;
+            camera.lookAt(0, 0, 0);
+            
+            console.log('🎮 카메라 상태 복구 완료');
+            
+            // 게임 오버 화면 표시
+            showGameOverScreen();
+        }
+    };
+    
+    // 복귀 애니메이션 시작
+    animateReturn();
 }
 
 // 게임 재시작
@@ -1703,8 +2008,9 @@ function animate() {
         }
     });
     
-    // 충돌 체크
+    // 충돌 체크 및 중력장 색상 업데이트
     if (gameRunning) {
+        updateGravityFieldColor(); // 중력장 위험도에 따른 색상 변경
         checkCollisions();
         checkGameOver();
     }
@@ -1843,7 +2149,7 @@ function launchStraightPlanet() {
     // 발사 완료 후 상태 초기화
     setTimeout(() => {
         isLaunching = false;
-    }, 500);
+    }, 100);
 }
 
 // 게임 시작 (라이브러리 로딩 확인 후)

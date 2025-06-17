@@ -680,7 +680,7 @@ function setupEventListeners() {
             }
             
             // 궤적 표시 (파워에 비례한 속도로)
-            const velocity = worldDirection.clone().multiplyScalar(launchPower * 0.5); // 궤적용 속도를 0.3에서 0.5로 증가
+            const velocity = worldDirection.clone().multiplyScalar(launchPower * 0.37); // 궤적용 속도를 0.3에서 0.5로 증가
             updateTrajectory(startPos, velocity);
             
             // 궤적 라인 스타일을 파워에 따라 조정

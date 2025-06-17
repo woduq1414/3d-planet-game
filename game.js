@@ -24,6 +24,10 @@ let dropLine;
 let mouse = new THREE.Vector2();
 let raycaster = new THREE.Raycaster();
 
+// 행성 도감 관련 변수들
+let discoveredPlanets = new Set(); // 발견된 행성들의 인덱스를 저장
+let planetMiniRenderers = {}; // 각 행성별 미니 렌더러 저장
+
 // 발사 시스템 변수들
 let isDragging = false;
 let dragStart = new THREE.Vector2();
@@ -66,16 +70,16 @@ const pressedKeys = new Set();
 
 // 행성 정의 (크기 순서대로)
 const PLANET_TYPES = [
-    { name: '달', color: 0xC0C0C0, size: 0.3, points: 1, texture: 'moon.png' },
-    { name: '수성', color: 0x8C7853, size: 0.4, points: 2, texture: 'mercury.png' },
-    { name: '금성', color: 0xFFC649, size: 0.5, points: 4, texture: 'venus.png' },
-    { name: '지구', color: 0x6B93D6, size: 0.6, points: 8, texture: 'earth.png' },
-    { name: '화성', color: 0xCD5C5C, size: 0.7, points: 16, texture: 'mars.png' },
-    { name: '목성', color: 0xD8CA9D, size: 1.0, points: 32, texture: 'jupiter.png' },
-    { name: '토성', color: 0xFAD5A5, size: 1.2, points: 64, texture: 'saturn.png' },
-    { name: '천왕성', color: 0x4FD0E7, size: 1.0, points: 128, texture: 'uranus.png' },
-    { name: '해왕성', color: 0x4B70DD, size: 1.0, points: 256, texture: 'neptune.png' },
-    { name: '태양', color: 0xFFD700, size: 1.5, points: 512, texture: 'sun.png' }
+    { name: '달', josa : "이", color: 0xC0C0C0, size: 0.3, points: 1, texture: 'moon.png', description: '지구의 위성인 달. 작지만 소중한 존재로 게임의 시작점이 됩니다.' },
+    { name: '수성',josa : "이", color: 0x8C7853, size: 0.4, points: 2, texture: 'mercury.png', description: '태양계에서 가장 가까운 행성. 빠른 공전으로 유명합니다.' },
+    { name: '금성', josa : "이",color: 0xFFC649, size: 0.5, points: 4, texture: 'venus.png', description: '샛별로 불리는 아름다운 행성. 강한 온실효과로 매우 뜨겁습니다.' },
+    { name: '지구',josa : "가", color: 0x6B93D6, size: 0.6, points: 8, texture: 'earth.png', description: '우리가 살고 있는 푸른 행성. 물과 생명이 존재하는 유일한 행성입니다.' },
+    { name: '화성',josa : "이", color: 0xCD5C5C, size: 0.7, points: 16, texture: 'mars.png', description: '붉은 행성으로 불리는 화성. 미래의 인류 거주지로 주목받고 있습니다.' },
+    { name: '목성',josa : "이", color: 0xD8CA9D, size: 1.0, points: 32, texture: 'jupiter.png', description: '태양계 최대의 행성. 거대한 가스 행성으로 많은 위성을 가지고 있습니다.' },
+    { name: '토성', josa : "이",color: 0xFAD5A5, size: 1.2, points: 64, texture: 'saturn.png', description: '아름다운 고리를 가진 행성. 독특한 고리계로 유명한 가스 행성입니다.' },
+    { name: '천왕성',josa : "이", color: 0x4FD0E7, size: 1.0, points: 128, texture: 'uranus.png', description: '옆으로 누워서 자전하는 특이한 행성. 차가운 얼음 행성입니다.' },
+    { name: '해왕성',josa : "이", color: 0x4B70DD, size: 1.0, points: 256, texture: 'neptune.png', description: '태양계의 가장 바깥쪽 행성. 강한 바람과 푸른색이 특징입니다.' },
+    { name: '태양',josa : "이", color: 0xFFD700, size: 1.5, points: 512, texture: 'sun.png', description: '태양계의 중심이 되는 항성. 모든 행성에 빛과 열을 제공하는 생명의 원천입니다.' }
 ];
 
 // 텍스처 로더
@@ -195,6 +199,9 @@ function init() {
         
         // 카메라와 조준용 행성 위치 동기화
         updateCameraPosition();
+        
+        // 초기 발견된 행성 설정 (처음 몇 개는 기본으로 발견된 상태)
+        discoveredPlanets.add(0); // 화성 (테스트 행성으로 생성되므로)
         
         // 게임 루프 시작
         animate();
@@ -416,7 +423,7 @@ function updateAimingPlanet() {
 function createTestPlanets() {
     // 중앙에 몇 개의 행성을 미리 배치해서 게임이 제대로 작동하는지 확인
     // 이러면 처음에 행성 3개가 생성되고 합쳐지는건데, 그냥 1개로 합침. (박재현)
-    createPlanet(4, new THREE.Vector3(0, 0, 0)); // 화성 ( 박재현)
+    createPlanet(0, new THREE.Vector3(0, 0, 0)); // 달 ( 박재현)
 }
 
 // 게임 영역 생성 (더 명확한 구체)
@@ -573,7 +580,26 @@ function createStarField() {
 
 // 다음 행성 설정
 function setNextPlanet() {
-    nextPlanetType = Math.floor(Math.random() * Math.min(5, PLANET_TYPES.length));
+    // 발견된 행성들 중에서 발사 가능한 행성들만 필터링
+    const availablePlanets = [];
+    
+    // 발견된 행성들 중에서 처음 5개까지만 발사 가능 (게임 밸런스 유지)
+    for (let i = 0; i < Math.min(5, PLANET_TYPES.length); i++) {
+        if (discoveredPlanets.has(i)) {
+            availablePlanets.push(i);
+        }
+    }
+    
+    // 발견된 행성이 없으면 기본적으로 첫 번째 행성(달) 사용
+    if (availablePlanets.length === 0) {
+        availablePlanets.push(0);
+        discoveredPlanets.add(0); // 달을 자동으로 발견된 것으로 처리
+    }
+    
+    // 발견된 행성들 중에서 랜덤 선택
+    const randomIndex = Math.floor(Math.random() * availablePlanets.length);
+    nextPlanetType = availablePlanets[randomIndex];
+    
     updatePlanetPreview();
 }
 
@@ -1057,6 +1083,12 @@ function mergePlanets(planet1, planet2) {
     
     // 부모 행성들이 충돌한 적이 있다면 새 행성도 충돌 플래그 설정
     newPlanet.hasCollided = planet1.hasCollided || planet2.hasCollided;
+    
+    // 새로운 행성 발견 체크 및 토스트 알림
+    if (!discoveredPlanets.has(newType)) {
+        discoveredPlanets.add(newType);
+        showPlanetDiscoveryToast(PLANET_TYPES[newType].name);
+    }
     
     // 운동량 적용 (감소된 속도)
     newPlanet.body.velocity.copy(newVelocity);
@@ -2018,6 +2050,8 @@ function restartGame() {
     
     // 배경음악 재시작 (박재현)
     startBackgroundMusic();
+    
+    // 발견된 행성 정보는 게임 재시작해도 유지됨 (discoveredPlanets 초기화 안함)
 }
 
 // UI 업데이트
@@ -2224,3 +2258,199 @@ function launchStraightPlanet() {
 //}); 
 
 // -> 게임 시작은, 스타트 버튼 1번만 누르고 되어야 함.
+
+// ================== 행성 도감 관련 함수들 ==================
+
+// 행성 발견 토스트 알림 표시
+function showPlanetDiscoveryToast(planetName) {
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.textContent = `🌟 ${planetName}${PLANET_TYPES[nextPlanetType].josa} 발견되었습니다! 🌟`;
+    
+    document.body.appendChild(toast);
+    
+    // 3초 후 토스트 제거
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 500);
+    }, 3000);
+}
+
+// 행성 도감 모달 열기
+function openPlanetEncyclopedia() {
+    const modal = document.getElementById('planetEncyclopediaModal');
+    modal.style.display = 'flex';
+    updatePlanetsGrid();
+}
+
+// 행성 도감 모달 닫기
+function closePlanetEncyclopedia() {
+    const modal = document.getElementById('planetEncyclopediaModal');
+    modal.style.display = 'none';
+    
+    // 미니 렌더러들 정리
+    Object.values(planetMiniRenderers).forEach(rendererData => {
+        if (rendererData.animationId) {
+            cancelAnimationFrame(rendererData.animationId);
+        }
+    });
+    planetMiniRenderers = {};
+}
+
+// 행성 그리드 업데이트
+function updatePlanetsGrid() {
+    const planetsGrid = document.getElementById('planetsGrid');
+    planetsGrid.innerHTML = '';
+    
+    PLANET_TYPES.forEach((planetData, index) => {
+        const planetCard = document.createElement('div');
+        planetCard.className = 'planet-card';
+        
+        const isDiscovered = discoveredPlanets.has(index);
+        if (!isDiscovered) {
+            planetCard.classList.add('locked');
+        }
+        
+        // 3D 미리보기 컨테이너
+        const preview3D = document.createElement('div');
+        preview3D.className = 'planet-preview-3d';
+        preview3D.id = `planet-preview-${index}`;
+        
+        // 행성 정보
+        const planetInfo = document.createElement('div');
+        planetInfo.className = 'planet-info';
+        
+        const planetName = document.createElement('div');
+        planetName.className = 'planet-name';
+        planetName.textContent = isDiscovered ? planetData.name : '???';
+        
+        const planetDescription = document.createElement('div');
+        planetDescription.className = 'planet-description';
+        planetDescription.textContent = isDiscovered ? planetData.description : '아직 발견되지 않은 행성입니다.';
+        
+        const planetStats = document.createElement('div');
+        planetStats.className = 'planet-stats';
+        if (isDiscovered) {
+            planetStats.innerHTML = `
+                점수: ${planetData.points}
+            `;
+        } else {
+            planetStats.textContent = '발견하면 정보가 공개됩니다.';
+        }
+        
+        planetInfo.appendChild(planetName);
+        planetInfo.appendChild(planetDescription);
+        planetInfo.appendChild(planetStats);
+        
+        planetCard.appendChild(preview3D);
+        planetCard.appendChild(planetInfo);
+        planetsGrid.appendChild(planetCard);
+        
+        // 발견된 행성만 3D 미리보기 생성
+        if (isDiscovered) {
+            setTimeout(() => createPlanetMiniPreview(index, preview3D), 100);
+        } else {
+            // 잠금 아이콘 표시
+            preview3D.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 2em; color: #666;">🔒</div>';
+        }
+    });
+}
+
+// 행성 미니 3D 미리보기 생성
+function createPlanetMiniPreview(planetIndex, container) {
+    if (!container || planetMiniRenderers[planetIndex]) return;
+    
+    const planetData = PLANET_TYPES[planetIndex];
+    
+    // 미니 3D 씬 설정
+    const miniScene = new THREE.Scene();
+    const miniCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    const miniRenderer = new THREE.WebGLRenderer({ 
+        alpha: true,
+        antialias: true 
+    });
+    
+    miniRenderer.setSize(80, 80);
+    miniRenderer.setClearColor(0x000000, 0);
+    container.appendChild(miniRenderer.domElement);
+    
+    // 조명 설정
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    miniScene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(1, 1, 1);
+    miniScene.add(directionalLight);
+    
+    // 행성 메시 생성
+    const geometry = new THREE.SphereGeometry(1, 16, 16);
+    
+    // 텍스처 로드 및 적용
+    const texture = textureLoader.load(
+        `textures/${planetData.texture}`,
+        undefined,
+        (error) => {
+            material.color.setHex(planetData.color);
+        }
+    );
+    
+    const material = new THREE.MeshPhongMaterial({ 
+        map: texture 
+    });
+    
+    // 태양의 경우 발광 효과
+    if (planetIndex === 9) {
+        material.emissive = new THREE.Color(0x332200);
+        material.emissiveIntensity = 0.3;
+    }
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    miniScene.add(mesh);
+    
+    // 토성의 고리 추가
+    if (planetIndex === 6) {
+        const ringGeometry = new THREE.RingGeometry(1.2, 1.8, 16);
+        const ringMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xC4A484, 
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.7
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.rotation.x = Math.PI / 2;
+        miniScene.add(ring);
+    }
+    
+    // 카메라 위치 설정
+    miniCamera.position.set(2, 1, 2);
+    miniCamera.lookAt(0, 0, 0);
+    
+    // 애니메이션 저장
+    planetMiniRenderers[planetIndex] = {
+        scene: miniScene,
+        camera: miniCamera,
+        renderer: miniRenderer,
+        mesh: mesh,
+        animationId: null
+    };
+    
+    // 회전 애니메이션
+    function animateMiniPlanet() {
+        const rendererData = planetMiniRenderers[planetIndex];
+        if (!rendererData) return;
+        
+        rendererData.mesh.rotation.y += 0.01;
+        rendererData.renderer.render(rendererData.scene, rendererData.camera);
+        rendererData.animationId = requestAnimationFrame(animateMiniPlanet);
+    }
+    
+    animateMiniPlanet();
+}
+
+// 전역 함수로 노출
+window.openPlanetEncyclopedia = openPlanetEncyclopedia;
+window.closePlanetEncyclopedia = closePlanetEncyclopedia;

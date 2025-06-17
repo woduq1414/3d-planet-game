@@ -219,6 +219,188 @@
             border: 1px solid #fff562;
             display: none;
         }
+
+        /* 행성 도감 스타일 */
+        #planetEncyclopediaButton {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #fff562;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            pointer-events: auto;
+        }
+
+        #planetEncyclopediaButton:hover {
+            background: rgba(255, 245, 98, 0.2);
+            box-shadow: 0 0 15px rgba(255, 245, 98, 0.5);
+        }
+
+        #planetEncyclopediaModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .encyclopedia-content {
+            background: rgba(20, 20, 20, 0.95);
+            border: 3px solid #fff562;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .encyclopedia-header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #fff562;
+            font-size: 2em;
+            text-shadow: 0 0 10px #fff562;
+        }
+
+        .encyclopedia-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #ff6666;
+            font-size: 2em;
+            cursor: pointer;
+            padding: 0;
+            transition: all 0.3s ease;
+        }
+
+        .encyclopedia-close:hover {
+            color: #ff0000;
+            text-shadow: 0 0 10px #ff0000;
+        }
+
+        .planets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .planet-card {
+            background: rgba(40, 40, 40, 0.8);
+            border: 2px solid #444;
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            transition: all 0.3s ease;
+            min-height: 120px;
+        }
+
+        .planet-card:hover {
+            border-color: #fff562;
+            box-shadow: 0 0 15px rgba(255, 245, 98, 0.3);
+        }
+
+        .planet-card.locked {
+            opacity: 0.5;
+            background: rgba(20, 20, 20, 0.5);
+            border-color: #666;
+        }
+
+        .planet-preview-3d {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: #000;
+            border: 2px solid #fff;
+            flex-shrink: 0;
+        }
+
+        .planet-info {
+            flex: 1;
+        }
+
+        .planet-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #fff562;
+            margin-bottom: 8px;
+        }
+
+        .planet-description {
+            color: #ccc;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .planet-stats {
+            margin-top: 10px;
+            font-size: 0.8em;
+            color: #aaa;
+        }
+
+        /* 토스트 알림 스타일 */
+        .toast-notification {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 400;
+            background: linear-gradient(135deg, #fff562, #ffaa00);
+            color: #000;
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 1.1em;
+            box-shadow: 0 4px 20px rgba(255, 245, 98, 0.6);
+            animation: toastSlideIn 0.5s ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .toast-notification.fade-out {
+            animation: toastFadeOut 0.5s ease-in forwards;
+        }
+
+        @keyframes toastFadeOut {
+            from {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-30px);
+            }
+        }
     </style>
 </head>
 
@@ -241,6 +423,9 @@
         
         <!-- 십자선 -->
         <div class="crosshair">⊕</div>
+        
+        <!-- 행성 도감 버튼 -->
+        <button id="planetEncyclopediaButton" onclick="openPlanetEncyclopedia()">▽ 행성 도감</button>
         
         <!-- 게임 정보 UI -->
         <div id="ui">
@@ -277,6 +462,17 @@
             <button onclick="restartGame()">🚀 다시 시작</button>
         </div>
 
+    </div>
+
+    <!-- 행성 도감 모달 -->
+    <div id="planetEncyclopediaModal">
+        <div class="encyclopedia-content">
+            <button class="encyclopedia-close" onclick="closePlanetEncyclopedia()">×</button>
+            <div class="encyclopedia-header">🌌 행성 도감 🌌</div>
+            <div id="planetsGrid" class="planets-grid">
+                <!-- 행성 카드들이 여기에 동적으로 생성됩니다 -->
+            </div>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -317,6 +513,23 @@
         // 전역 함수로 파워 미터 업데이트 함수 노출
         window.updatePowerMeter = updatePowerMeter;
         window.showTrajectoryInfo = showTrajectoryInfo;
+        
+        // 행성 도감 모달 관련 이벤트
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                const modal = document.getElementById('planetEncyclopediaModal');
+                if (modal && modal.style.display === 'flex') {
+                    window.closePlanetEncyclopedia();
+                }
+            }
+        });
+        
+        // 모달 배경 클릭 시 닫기
+        document.getElementById('planetEncyclopediaModal').addEventListener('click', (event) => {
+            if (event.target.id === 'planetEncyclopediaModal') {
+                window.closePlanetEncyclopedia();
+            }
+        });
     </script>
 </body>
 

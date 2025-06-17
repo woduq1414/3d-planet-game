@@ -391,16 +391,96 @@
             animation: toastFadeOut 0.5s ease-in forwards;
         }
 
-        @keyframes toastFadeOut {
-            from {
-                opacity: 1;
-                transform: translateX(-50%) translateY(0);
-            }
-            to {
-                opacity: 0;
-                transform: translateX(-50%) translateY(-30px);
-            }
-        }
+                 @keyframes toastFadeOut {
+             from {
+                 opacity: 1;
+                 transform: translateX(-50%) translateY(0);
+             }
+             to {
+                 opacity: 0;
+                 transform: translateX(-50%) translateY(-30px);
+             }
+         }
+
+         /* 행성 3D 뷰어 스타일 */
+         #planetViewerModal {
+             position: fixed;
+             top: 0;
+             left: 0;
+             width: 100vw;
+             height: 100vh;
+             background: rgba(0, 0, 0, 0.95);
+             z-index: 400;
+             display: none;
+             align-items: center;
+             justify-content: center;
+         }
+
+         .viewer-content {
+             background: rgba(10, 10, 10, 0.95);
+             border: 3px solid #fff562;
+             border-radius: 20px;
+             padding: 20px;
+             width: 80vw;
+             height: 80vh;
+             max-width: 800px;
+             max-height: 600px;
+             position: relative;
+             display: flex;
+             flex-direction: column;
+         }
+
+         .viewer-header {
+             text-align: center;
+             margin-bottom: 15px;
+             color: #fff562;
+             font-size: 1.5em;
+             text-shadow: 0 0 10px #fff562;
+         }
+
+         .viewer-close {
+             position: absolute;
+             top: 15px;
+             right: 20px;
+             background: none;
+             border: none;
+             color: #ff6666;
+             font-size: 2em;
+             cursor: pointer;
+             padding: 0;
+             transition: all 0.3s ease;
+             z-index: 10;
+         }
+
+         .viewer-close:hover {
+             color: #ff0000;
+             text-shadow: 0 0 10px #ff0000;
+         }
+
+         .viewer-3d-container {
+             flex: 1;
+             border: 2px solid #444;
+             border-radius: 10px;
+             overflow: hidden;
+             position: relative;
+             background: #000;
+         }
+
+         .viewer-controls {
+             margin-top: 15px;
+             text-align: center;
+             color: #ccc;
+             font-size: 0.9em;
+         }
+
+         .planet-card:not(.locked) {
+             cursor: pointer;
+         }
+
+         .planet-card:not(.locked):hover .planet-preview-3d {
+             border-color: #fff562;
+             box-shadow: 0 0 15px rgba(255, 245, 98, 0.5);
+         }
     </style>
 </head>
 
@@ -475,6 +555,20 @@
         </div>
     </div>
 
+    <!-- 행성 3D 뷰어 모달 -->
+    <div id="planetViewerModal">
+        <div class="viewer-content">
+            <button class="viewer-close" onclick="closePlanetViewer()">×</button>
+            <div id="viewerHeader" class="viewer-header">행성 3D 뷰어</div>
+            <div id="viewer3DContainer" class="viewer-3d-container">
+                <!-- 3D 뷰어가 여기에 생성됩니다 -->
+            </div>
+            <div class="viewer-controls">
+                🖱️ 마우스 드래그: 회전 | 🖱️ 휠: 확대/축소 | ESC: 닫기
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <script src="intro.js"></script>
@@ -517,8 +611,12 @@
         // 행성 도감 모달 관련 이벤트
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                const modal = document.getElementById('planetEncyclopediaModal');
-                if (modal && modal.style.display === 'flex') {
+                const encyclopediaModal = document.getElementById('planetEncyclopediaModal');
+                const viewerModal = document.getElementById('planetViewerModal');
+                
+                if (viewerModal && viewerModal.style.display === 'flex') {
+                    window.closePlanetViewer();
+                } else if (encyclopediaModal && encyclopediaModal.style.display === 'flex') {
                     window.closePlanetEncyclopedia();
                 }
             }
@@ -528,6 +626,12 @@
         document.getElementById('planetEncyclopediaModal').addEventListener('click', (event) => {
             if (event.target.id === 'planetEncyclopediaModal') {
                 window.closePlanetEncyclopedia();
+            }
+        });
+        
+        document.getElementById('planetViewerModal').addEventListener('click', (event) => {
+            if (event.target.id === 'planetViewerModal') {
+                window.closePlanetViewer();
             }
         });
     </script>

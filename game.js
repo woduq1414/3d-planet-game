@@ -28,6 +28,19 @@ let raycaster = new THREE.Raycaster();
 let discoveredPlanets = new Set(); // 발견된 행성들의 인덱스를 저장
 let planetMiniRenderers = {}; // 각 행성별 미니 렌더러 저장
 
+// 3D 뷰어 관련 변수들
+let viewerScene, viewerCamera, viewerRenderer;
+let viewerPlanet, viewerRing, viewerGlow;
+let viewerContainer;
+let viewerControls = {
+    isDragging: false,
+    previousMousePosition: { x: 0, y: 0 },
+    rotation: { x: 0, y: 0 },
+    distance: 5,
+    minDistance: 2,
+    maxDistance: 15
+};
+
 // 발사 시스템 변수들
 let isDragging = false;
 let dragStart = new THREE.Vector2();
@@ -1087,7 +1100,7 @@ function mergePlanets(planet1, planet2) {
     // 새로운 행성 발견 체크 및 토스트 알림
     if (!discoveredPlanets.has(newType)) {
         discoveredPlanets.add(newType);
-        showPlanetDiscoveryToast(PLANET_TYPES[newType].name);
+        showPlanetDiscoveryToast(PLANET_TYPES[newType].name, newType);
     }
     
     // 운동량 적용 (감소된 속도)
@@ -2262,10 +2275,10 @@ function launchStraightPlanet() {
 // ================== 행성 도감 관련 함수들 ==================
 
 // 행성 발견 토스트 알림 표시
-function showPlanetDiscoveryToast(planetName) {
+function showPlanetDiscoveryToast(planetName, planetIndex) {
     const toast = document.createElement('div');
     toast.className = 'toast-notification';
-    toast.textContent = `🌟 ${planetName}${PLANET_TYPES[nextPlanetType].josa} 발견되었습니다! 🌟`;
+    toast.textContent = `🌟 ${planetName}${PLANET_TYPES[planetIndex].josa} 발견되었습니다! 🌟`;
     
     document.body.appendChild(toast);
     
@@ -2350,9 +2363,14 @@ function updatePlanetsGrid() {
         planetCard.appendChild(planetInfo);
         planetsGrid.appendChild(planetCard);
         
-        // 발견된 행성만 3D 미리보기 생성
+        // 발견된 행성만 3D 미리보기 생성 및 클릭 이벤트 추가
         if (isDiscovered) {
             setTimeout(() => createPlanetMiniPreview(index, preview3D), 100);
+            
+            // 행성 카드 클릭 시 3D 뷰어 열기
+            planetCard.addEventListener('click', () => {
+                openPlanetViewer(index);
+            });
         } else {
             // 잠금 아이콘 표시
             preview3D.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 2em; color: #666;">🔒</div>';
@@ -2451,6 +2469,270 @@ function createPlanetMiniPreview(planetIndex, container) {
     animateMiniPlanet();
 }
 
+// ================== 3D 뷰어 관련 함수들 ==================
+
+// 3D 뷰어 열기
+function openPlanetViewer(planetIndex) {
+    const planetData = PLANET_TYPES[planetIndex];
+    
+    // 헤더 업데이트
+    document.getElementById('viewerHeader').textContent = `🌌 ${planetData.name} 🌌`;
+    
+    // 모달 표시
+    const modal = document.getElementById('planetViewerModal');
+    modal.style.display = 'flex';
+    
+    // 3D 뷰어 초기화
+    initPlanetViewer(planetIndex);
+}
+
+// 3D 뷰어 닫기
+function closePlanetViewer() {
+    const modal = document.getElementById('planetViewerModal');
+    modal.style.display = 'none';
+    
+    // 3D 뷰어 정리
+    cleanupPlanetViewer();
+}
+
+// 3D 뷰어 초기화
+function initPlanetViewer(planetIndex) {
+    const planetData = PLANET_TYPES[planetIndex];
+    viewerContainer = document.getElementById('viewer3DContainer');
+    
+    // 기존 뷰어 정리
+    cleanupPlanetViewer();
+    
+    // 3D 씬 설정
+    viewerScene = new THREE.Scene();
+    viewerScene.background = new THREE.Color(0x000011);
+    
+    // 카메라 설정
+    const aspect = viewerContainer.clientWidth / viewerContainer.clientHeight;
+    viewerCamera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+    
+    // 렌더러 설정
+    viewerRenderer = new THREE.WebGLRenderer({ antialias: true });
+    viewerRenderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
+    viewerRenderer.shadowMap.enabled = true;
+    viewerRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    viewerContainer.appendChild(viewerRenderer.domElement);
+    
+    // 조명 설정
+    setupViewerLights();
+    
+    // 행성 생성
+    createViewerPlanet(planetIndex);
+    
+    // 컨트롤 초기화
+    viewerControls.rotation = { x: 0, y: 0 };
+    viewerControls.distance = 5;
+    updateViewerCameraPosition();
+    
+    // 이벤트 리스너 설정
+    setupViewerEventListeners();
+    
+    // 애니메이션 시작
+    animateViewer();
+}
+
+// 뷰어 조명 설정
+function setupViewerLights() {
+    // 환경 조명
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    viewerScene.add(ambientLight);
+    
+    // 주 조명
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(5, 5, 5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    viewerScene.add(directionalLight);
+    
+    // 보조 조명
+    const pointLight = new THREE.PointLight(0xffffff, 0.5);
+    pointLight.position.set(-5, 3, 5);
+    viewerScene.add(pointLight);
+}
+
+// 뷰어용 행성 생성
+function createViewerPlanet(planetIndex) {
+    const planetData = PLANET_TYPES[planetIndex];
+    
+    // 행성 메시 생성
+    const geometry = new THREE.SphereGeometry(1, 64, 64);
+    
+    // 텍스처 로드
+    const texture = textureLoader.load(
+        `textures/${planetData.texture}`,
+        undefined,
+        (error) => {
+            material.color.setHex(planetData.color);
+        }
+    );
+    
+    const material = new THREE.MeshPhongMaterial({ 
+        map: texture,
+        shininess: 50
+    });
+    
+    // 태양의 경우 발광 효과
+    if (planetIndex === 9) {
+        material.emissive = new THREE.Color(0x332200);
+        material.emissiveIntensity = 0.4;
+        
+        // 태양 글로우 효과
+        const glowGeometry = new THREE.SphereGeometry(1.3, 32, 32);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffaa00,
+            transparent: true,
+            opacity: 0.2
+        });
+        viewerGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+        viewerScene.add(viewerGlow);
+    }
+    
+    viewerPlanet = new THREE.Mesh(geometry, material);
+    viewerPlanet.castShadow = true;
+    viewerPlanet.receiveShadow = true;
+    viewerScene.add(viewerPlanet);
+    
+    // 토성의 고리
+    if (planetIndex === 6) {
+        const ringGeometry = new THREE.RingGeometry(1.5, 2.2, 64);
+        const ringMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xC4A484, 
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.8
+        });
+        viewerRing = new THREE.Mesh(ringGeometry, ringMaterial);
+        viewerRing.rotation.x = Math.PI / 2;
+        viewerRing.castShadow = true;
+        viewerRing.receiveShadow = true;
+        viewerScene.add(viewerRing);
+    }
+}
+
+// 뷰어 카메라 위치 업데이트
+function updateViewerCameraPosition() {
+    const x = Math.sin(viewerControls.rotation.y) * Math.cos(viewerControls.rotation.x) * viewerControls.distance;
+    const y = Math.sin(viewerControls.rotation.x) * viewerControls.distance;
+    const z = Math.cos(viewerControls.rotation.y) * Math.cos(viewerControls.rotation.x) * viewerControls.distance;
+    
+    viewerCamera.position.set(x, y, z);
+    viewerCamera.lookAt(0, 0, 0);
+}
+
+// 뷰어 이벤트 리스너 설정
+function setupViewerEventListeners() {
+    const canvas = viewerRenderer.domElement;
+    
+    // 마우스 다운
+    canvas.addEventListener('mousedown', (event) => {
+        viewerControls.isDragging = true;
+        viewerControls.previousMousePosition = {
+            x: event.clientX,
+            y: event.clientY
+        };
+        canvas.style.cursor = 'grabbing';
+    });
+    
+    // 마우스 이동
+    canvas.addEventListener('mousemove', (event) => {
+        if (!viewerControls.isDragging) return;
+        
+        const deltaX = event.clientX - viewerControls.previousMousePosition.x;
+        const deltaY = event.clientY - viewerControls.previousMousePosition.y;
+        
+        viewerControls.rotation.y += deltaX * 0.01;
+        viewerControls.rotation.x += deltaY * 0.01;
+        
+        // X 회전 제한 (위아래)
+        viewerControls.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, viewerControls.rotation.x));
+        
+        viewerControls.previousMousePosition = {
+            x: event.clientX,
+            y: event.clientY
+        };
+        
+        updateViewerCameraPosition();
+    });
+    
+    // 마우스 업
+    canvas.addEventListener('mouseup', () => {
+        viewerControls.isDragging = false;
+        canvas.style.cursor = 'grab';
+    });
+    
+    // 마우스 리브
+    canvas.addEventListener('mouseleave', () => {
+        viewerControls.isDragging = false;
+        canvas.style.cursor = 'grab';
+    });
+    
+    // 마우스 휠 (확대/축소)
+    canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        
+        const zoomSpeed = 0.5;
+        viewerControls.distance += event.deltaY * 0.01 * zoomSpeed;
+        viewerControls.distance = Math.max(viewerControls.minDistance, Math.min(viewerControls.maxDistance, viewerControls.distance));
+        
+        updateViewerCameraPosition();
+    });
+    
+    // 초기 커서 설정
+    canvas.style.cursor = 'grab';
+}
+
+// 뷰어 애니메이션
+function animateViewer() {
+    if (!viewerScene || !viewerCamera || !viewerRenderer) return;
+    
+    // 행성 자전
+    if (viewerPlanet) {
+        viewerPlanet.rotation.y += 0.005;
+    }
+    
+    // 토성 고리 회전
+    if (viewerRing) {
+        viewerRing.rotation.z += 0.002;
+    }
+    
+    // 태양 글로우 효과
+    if (viewerGlow) {
+        const pulse = Math.sin(Date.now() * 0.002) * 0.1 + 0.2;
+        viewerGlow.material.opacity = pulse;
+        viewerGlow.rotation.y += 0.001;
+    }
+    
+    viewerRenderer.render(viewerScene, viewerCamera);
+    
+    // 모달이 열려있을 때만 애니메이션 계속
+    const modal = document.getElementById('planetViewerModal');
+    if (modal && modal.style.display === 'flex') {
+        requestAnimationFrame(animateViewer);
+    }
+}
+
+// 뷰어 정리
+function cleanupPlanetViewer() {
+    if (viewerRenderer && viewerContainer) {
+        viewerContainer.innerHTML = '';
+    }
+    
+    viewerScene = null;
+    viewerCamera = null;
+    viewerRenderer = null;
+    viewerPlanet = null;
+    viewerRing = null;
+    viewerGlow = null;
+}
+
 // 전역 함수로 노출
 window.openPlanetEncyclopedia = openPlanetEncyclopedia;
 window.closePlanetEncyclopedia = closePlanetEncyclopedia;
+window.openPlanetViewer = openPlanetViewer;
+window.closePlanetViewer = closePlanetViewer;

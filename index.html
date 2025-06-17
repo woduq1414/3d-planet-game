@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,18 +9,98 @@
         body {
             margin: 0;
             padding: 0;
-            background: #000;
+            background: black;
             color: white;
             font-family: 'Arial', sans-serif;
             overflow: hidden;
             cursor: crosshair;
         }
+
+        /* Intro Style*/
+
+        #introScreen {
+            position: fixed;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        #introCenter {
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            animation: fadeMoonIn 10s forwards;
+            animation-delay: 5s;
+        }
+
+        #gameTitle {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3em;
+            font-weight: bold;
+            color: #fff562;
+            text-shadow: 0 0 15px #fff562, 0 0 30px #ffffff;
+            display: none;
+            z-index: 1000;
+        }
+
+        #subtitle {
+            position: absolute;
+            bottom: 100px;
+            width: 100%;
+            text-align: center;
+            font-size: 1.5em;
+            padding: 0 20px;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            opacity: 0;
+            animation: fadeIn 2s forwards;
+        }
+
+        #moonCanvasContainer {
+            width: 200px;
+            height: 200px;
+            margin: 20px 0;
+        }
+
+        #startButton {
+            position: absolute;
+            top: 60%;
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 8px;
+            background: #6e6e6e;
+            color: white;
+            cursor: pointer;
+            display: none;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeMoonIn {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
         
+        /* Game Style*/
+
         #gameContainer {
             position: relative;
             width: 100vw;
             height: 100vh;
-            display: none; /* 초기에는 숨김 */
+            display: none;
         }
         
         #ui {
@@ -30,7 +111,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             border-radius: 10px;
-            border: 2px solid #00ffff;
+            border: 2px solid #fff562;
         }
         
         #nextPlanet {
@@ -41,7 +122,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             border-radius: 10px;
-            border: 2px solid #00ffff;
+            border: 2px solid #fff562;
             text-align: center;
         }
         
@@ -61,7 +142,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             border-radius: 10px;
-            border: 2px solid #00ffff;
+            border: 2px solid #fff562;
             text-align: center;
         }
         
@@ -80,7 +161,7 @@
         }
         
         button {
-            background: #00ffff;
+            background: #6e6e6e;
             color: black;
             border: none;
             padding: 10px 20px;
@@ -91,7 +172,7 @@
         }
         
         button:hover {
-            background: #00cccc;
+            background: #6e6e6e;
         }
         
         .power-bar {
@@ -131,82 +212,35 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 10px;
             border-radius: 5px;
-            border: 1px solid #00ff00;
+            border: 1px solid #fff562;
             display: none;
-        }
-        
-        /* 인트로 화면 스타일 추가 */
-        #introScreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-        }
-        
-        #gameTitle {
-            font-size: 48px;
-            margin-bottom: 30px;
-            display: none;
-        }
-        
-        #subtitle {
-            font-size: 24px;
-            text-align: center;
-            margin-bottom: 30px;
-            min-height: 200px;
-        }
-        
-        #startButton {
-            display: none;
-            padding: 15px 30px;
-            font-size: 20px;
-            background: #00ffff;
-            color: black;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        
-        #startButton:hover {
-            background: #00cccc;
-        }
-        
-        #moonCanvasContainer {
-            width: 200px;
-            height: 200px;
-            margin: 20px 0;
-        }
-        
-        @keyframes fadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; }
         }
     </style>
 </head>
-<body>
-    <!-- 인트로 화면 추가 -->
-    <div id="introScreen">
-        <h1 id="gameTitle">행성팡팡!</h1>
-        <div id="subtitle"></div>
-        <div id="moonCanvasContainer"></div>
-        <button id="startButton" onclick="startGame()">게임 시작</button>
-    </div>
 
+<body>
+    <!-- Intro -->
+    <audio id="typingSound" src="sounds/typewriter.mp3" preload="auto" loop></audio>
+    <audio id="moonSound" src="sounds/moon.mp3" preload="auto"></audio>
+    <audio id="titleSound" src="sounds/start.mp3" preload="auto"></audio>
+    <div id="introScreen">
+        <div id="gameTitle">행성팡팡!</div>
+        <div id="introCenter">
+            <div id="moonCanvasContainer"></div>
+        </div>
+        <div id="subtitle"></div>
+        <button id="startButton" onclick="startGame()">🚀 게임 시작 🚀</button>
+    </div>
+    
+    <!-- Game -->
     <div id="gameContainer">
+        
         <!-- 십자선 -->
         <div class="crosshair">⊕</div>
         
         <!-- 게임 정보 UI -->
         <div id="ui">
-            <h3>🚀 행성팡팡!</h3>
+            <h3>행성팡팡!</h3>
             <div>점수: <span id="score">0</span></div>
             <div>최고점수: <span id="bestScore">0</span></div>
         </div>
@@ -238,13 +272,14 @@
             <p>최종 점수: <span id="finalScore">0</span></p>
             <button onclick="restartGame()">🚀 다시 시작</button>
         </div>
+
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <script src="intro.js"></script>
     <script src="game.js"></script>
-    
+
     <script>
         // 파워 미터 업데이트
         function updatePowerMeter(power) {
@@ -280,4 +315,5 @@
         window.showTrajectoryInfo = showTrajectoryInfo;
     </script>
 </body>
+
 </html>

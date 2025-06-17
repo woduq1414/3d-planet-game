@@ -1142,6 +1142,9 @@ function mergePlanets(planet1, planet2) {
     // 합치기 효과 (새로 생성되는 행성의 레벨 전달)
     createMergeEffect(newPosition, newType);
     
+    // 행성 종류에 따른 음계 재생
+    playPlanetSound(newType);
+    
     // UI 업데이트
     updateUI();
     
@@ -1227,8 +1230,7 @@ function createMergeEffect(position, planetLevel = 0) {
     // 5. 공간 왜곡 효과
     // createSpaceDistortion(position);
     
-    // 소리 효과 (더 우주적인 소리)
-    // playCosmicSound();
+        // 소리 효과는 mergePlanets에서 행성별로 재생됨
 }
 
 // 중심 폭발 빛 효과 (행성 색상) - 스케일링
@@ -1553,7 +1555,170 @@ function createSpaceDistortion(position) {
         animate();
     }
     
-// 우주적인 사운드 효과
+// 행성별 음계 사운드 (도-레-미-파-솔-라-시-도)
+function playPlanetSound(planetType) {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // 음계 주파수 정의 (C3 옥타브 기준 - 한 옥타브 낮음)
+        const musicalNotes = [
+            130.81, // 도 (C3) - 달
+            146.83, // 레 (D3) - 수성
+            164.81, // 미 (E3) - 금성
+            174.61, // 파 (F3) - 지구
+            196.00, // 솔 (G3) - 화성
+            220.00, // 라 (A3) - 목성
+            246.94, // 시 (B3) - 토성
+            261.63, // 도 (C4) - 천왕성
+            293.66, // 레 (D4) - 해왕성
+            329.63  // 미 (E4) - 태양
+        ];
+        
+        // 행성 타입에 해당하는 주파수 선택
+        const baseFrequency = musicalNotes[planetType] || musicalNotes[0];
+        
+        console.log(`🎵 행성 사운드 재생: ${PLANET_TYPES[planetType]?.name || '알 수 없음'} - ${baseFrequency.toFixed(2)}Hz`);
+        
+        // 리버브 효과를 위한 컨볼버 생성 (우주적인 울림)
+        const convolver = audioContext.createConvolver();
+        const reverbGain = audioContext.createGain();
+        reverbGain.gain.setValueAtTime(0.4, audioContext.currentTime); // 리버브 강도
+        
+        // 인공 리버브 임펄스 응답 생성 (우주적인 긴 울림)
+        const impulseLength = audioContext.sampleRate * 3; // 3초 리버브
+        const impulse = audioContext.createBuffer(2, impulseLength, audioContext.sampleRate);
+        
+        for (let channel = 0; channel < 2; channel++) {
+            const channelData = impulse.getChannelData(channel);
+            for (let i = 0; i < impulseLength; i++) {
+                const decay = Math.pow(1 - (i / impulseLength), 2); // 제곱 감쇠
+                channelData[i] = (Math.random() * 2 - 1) * decay * 0.3; // 노이즈 기반 리버브
+            }
+        }
+        convolver.buffer = impulse;
+        
+        // 리버브 체인 설정
+        convolver.connect(reverbGain);
+        reverbGain.connect(audioContext.destination);
+        
+        // 메인 톤 (기본 음계)
+        const mainOsc = audioContext.createOscillator();
+        const mainGain = audioContext.createGain();
+        const mainDryGain = audioContext.createGain();
+        const mainWetGain = audioContext.createGain();
+        
+        mainOsc.connect(mainGain);
+        mainGain.connect(mainDryGain);
+        mainGain.connect(mainWetGain);
+        mainDryGain.connect(audioContext.destination); // 드라이 신호
+        mainWetGain.connect(convolver); // 웨트 신호 (리버브)
+        
+        mainDryGain.gain.setValueAtTime(0.6, audioContext.currentTime); // 드라이 60%
+        mainWetGain.gain.setValueAtTime(0.4, audioContext.currentTime); // 웨트 40%
+        
+        mainOsc.type = 'sine'; // 부드러운 사인파
+        mainOsc.frequency.setValueAtTime(baseFrequency, audioContext.currentTime);
+        mainGain.gain.setValueAtTime(0.3, audioContext.currentTime);
+        mainGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.2);
+        
+        // 하모닉 톤 (5도 위 화음)
+        const harmOsc = audioContext.createOscillator();
+        const harmGain = audioContext.createGain();
+        const harmDryGain = audioContext.createGain();
+        const harmWetGain = audioContext.createGain();
+        
+        harmOsc.connect(harmGain);
+        harmGain.connect(harmDryGain);
+        harmGain.connect(harmWetGain);
+        harmDryGain.connect(audioContext.destination); // 드라이 신호
+        harmWetGain.connect(convolver); // 웨트 신호 (리버브)
+        
+        harmDryGain.gain.setValueAtTime(0.6, audioContext.currentTime); // 드라이 60%
+        harmWetGain.gain.setValueAtTime(0.4, audioContext.currentTime); // 웨트 40%
+        
+        harmOsc.type = 'sine';
+        harmOsc.frequency.setValueAtTime(baseFrequency * 1.5, audioContext.currentTime); // 완전5도
+        harmGain.gain.setValueAtTime(0.15, audioContext.currentTime);
+        harmGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.0);
+        
+        // 옥타브 하모닉 (높은 음)
+        const octaveOsc = audioContext.createOscillator();
+        const octaveGain = audioContext.createGain();
+        const octaveDryGain = audioContext.createGain();
+        const octaveWetGain = audioContext.createGain();
+        
+        octaveOsc.connect(octaveGain);
+        octaveGain.connect(octaveDryGain);
+        octaveGain.connect(octaveWetGain);
+        octaveDryGain.connect(audioContext.destination); // 드라이 신호
+        octaveWetGain.connect(convolver); // 웨트 신호 (리버브)
+        
+        octaveDryGain.gain.setValueAtTime(0.5, audioContext.currentTime); // 드라이 50%
+        octaveWetGain.gain.setValueAtTime(0.5, audioContext.currentTime); // 웨트 50% (고음은 더 많은 리버브)
+        
+        octaveOsc.type = 'triangle'; // 삼각파로 밝은 소리
+        octaveOsc.frequency.setValueAtTime(baseFrequency * 2, audioContext.currentTime); // 옥타브
+        octaveGain.gain.setValueAtTime(0.1, audioContext.currentTime);
+        octaveGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+        
+        // // 행성 크기에 따른 저음 강화 (큰 행성일수록 더 풍성한 저음)
+        // if (planetType >= 5) { // 목성 이상의 큰 행성들
+        //     const bassOsc = audioContext.createOscillator();
+        //     const bassGain = audioContext.createGain();
+        //     bassOsc.connect(bassGain);
+        //     bassGain.connect(audioContext.destination);
+            
+        //     bassOsc.type = 'sawtooth'; // 톱니파로 풍성한 저음
+        //     bassOsc.frequency.setValueAtTime(baseFrequency / 2, audioContext.currentTime); // 낮은 옥타브
+        //     bassGain.gain.setValueAtTime(0.2, audioContext.currentTime);
+        //     bassGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.5);
+            
+        //     bassOsc.start(audioContext.currentTime);
+        //     bassOsc.stop(audioContext.currentTime + 1.5);
+        // }
+        
+        // 태양의 경우 특별한 효과음 추가
+        if (planetType === 9) { // 태양
+            const sunSparkleOsc = audioContext.createOscillator();
+            const sunSparkleGain = audioContext.createGain();
+            const sunSparkleDryGain = audioContext.createGain();
+            const sunSparkleWetGain = audioContext.createGain();
+            
+            sunSparkleOsc.connect(sunSparkleGain);
+            sunSparkleGain.connect(sunSparkleDryGain);
+            sunSparkleGain.connect(sunSparkleWetGain);
+            sunSparkleDryGain.connect(audioContext.destination); // 드라이 신호
+            sunSparkleWetGain.connect(convolver); // 웨트 신호 (리버브)
+            
+            sunSparkleDryGain.gain.setValueAtTime(0.3, audioContext.currentTime); // 드라이 30%
+            sunSparkleWetGain.gain.setValueAtTime(0.7, audioContext.currentTime); // 웨트 70% (특수 효과는 더 많은 리버브)
+            
+            sunSparkleOsc.type = 'square';
+            sunSparkleOsc.frequency.setValueAtTime(baseFrequency * 4, audioContext.currentTime);
+            sunSparkleOsc.frequency.exponentialRampToValueAtTime(baseFrequency * 8, audioContext.currentTime + 0.3);
+            sunSparkleGain.gain.setValueAtTime(0.05, audioContext.currentTime);
+            sunSparkleGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            sunSparkleOsc.start(audioContext.currentTime);
+            sunSparkleOsc.stop(audioContext.currentTime + 0.5);
+        }
+        
+        // 모든 오실레이터 시작
+        mainOsc.start(audioContext.currentTime);
+        harmOsc.start(audioContext.currentTime);
+        octaveOsc.start(audioContext.currentTime);
+        
+        // 정리
+        mainOsc.stop(audioContext.currentTime + 1.2);
+        harmOsc.stop(audioContext.currentTime + 1.0);
+        octaveOsc.stop(audioContext.currentTime + 0.8);
+        
+    } catch (e) {
+        console.log('행성 사운드 재생 실패:', e);
+    }
+}
+
+// 우주적인 사운드 효과 (기존 함수 - 필요시 사용)
 function playCosmicSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -2149,7 +2314,7 @@ function launchStraightPlanet() {
     // 발사 완료 후 상태 초기화
     setTimeout(() => {
         isLaunching = false;
-    }, 100);
+    }, 300);
 }
 
 // 게임 시작 (라이브러리 로딩 확인 후)

@@ -15,117 +15,144 @@ const introScript = [
 
 let currentLine = 0;
 let currentChar = 0;
-let typingTimeoutId = null;
-let isTypingSkipped = false;
-let skipTextElement = null; // 스킵 안내 텍스트 요소 참조
+let isTypingComplete = false;
+let isSkipped = false;
 const subtitle = document.getElementById("subtitle");
 const gameTitle = document.getElementById("gameTitle");
 const startButton = document.getElementById("startButton");
+const typingSound = document.getElementById("typingSound");
+const moonSound = document.getElementById("moonSound");
+const titleSound = document.getElementById("titleSound");
 
-function hideSkipText() {
-    if (skipTextElement) {
-        skipTextElement.style.display = 'none';
-    }
-}
 
-function skipTyping() {
-    if (isTypingSkipped) return; // 이미 스킵했다면 무시
-    
-    isTypingSkipped = true;
-    if (typingTimeoutId) {
-        clearTimeout(typingTimeoutId);
-    }
-    
-    // 달 애니메이션 즉시 실행
-    initMoonAnimation();
-    
-    // 게임 시작 버튼과 제목 표시
-    startButton.style.display = "inline-block";
-    gameTitle.style.display = "block";
-    
-    // 자막 초기화
-    subtitle.innerHTML = '';
-    
-    // 스킵 안내 텍스트 숨기기
-    hideSkipText();
-}
+
+
 
 function typeNextChar() {
-    if (isTypingSkipped) return;
+    if (isSkipped) return; // 스킵되었으면 실행 중단
     
     if (currentLine >= introScript.length) {
-        startButton.style.display = "inline-block";
-        gameTitle.style.display = "block";
-        // 타이핑이 자연스럽게 끝났을 때도 스킵 텍스트 숨기기
-        hideSkipText();
+        completeTyping();
         return;
     }
 
     const line = introScript[currentLine];
+    
+    if (currentChar === 0) {
+        typingSound.currentTime = 0;
+        typingSound.play();
+    }
 
     if (currentChar < line.length) {
         subtitle.innerHTML += line[currentChar];
         currentChar++;
-        typingTimeoutId = setTimeout(typeNextChar, 50);
+        setTimeout(typeNextChar, 50);
     } else {
+        typingSound.pause();
         if (currentLine === 3) {
             initMoonAnimation();
+            moonSound.currentTime = 0;
+            moonSound.play();
         }
         subtitle.innerHTML += "<br/>";
         currentLine++;
         currentChar = 0;
-        typingTimeoutId = setTimeout(() => {
+        setTimeout(() => {
+            if (isSkipped) return; // 스킵되었으면 실행 중단
             subtitle.innerHTML = '';
             typeNextChar();
         }, 1350);
     }
 }
 
+function completeTyping() {
+    isTypingComplete = true;
+    typingSound.pause();
+    startButton.style.display = "inline-block";
+    gameTitle.style.display = "block";
+    titleSound.currentTime = 0;
+    titleSound.play();
+    hideSkipMessage();
+}
+
+function skipTyping() {
+    if (isTypingComplete) return;
+    
+    // 스킵 플래그 설정으로 모든 진행 중인 애니메이션/사운드 중단
+    isSkipped = true;
+    
+    // 모든 사운드 중단
+    typingSound.pause();
+    moonSound.pause();
+    
+    // 화면을 클리어 (원래 스크립트 완료 후 상태와 동일하게)
+    subtitle.innerHTML = '';
+    
+    // 달 애니메이션을 즉시 초기화하고 표시
+    if (!moonScene) {
+        console.log("initMoonAnimation");
+        initMoonAnimation();
+
+        document.getElementById('introCenter').style.opacity = '1';
+    }
+    
+    // 달 컨테이너를 즉시 보이게 함
+    const moonContainer = document.getElementById('moonCanvasContainer');
+    if (moonContainer) {
+        moonContainer.style.display = 'block';
+        moonContainer.style.opacity = '1';
+    }
+    
+    completeTyping();
+}
+
+function showSkipMessage() {
+    let skipMessage = document.getElementById('skipMessage');
+    if (!skipMessage) {
+        skipMessage = document.createElement('div');
+        skipMessage.id = 'skipMessage';
+        skipMessage.innerHTML = 'SPACE 키를 눌러 스킵';
+        skipMessage.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffffff;
+            font-size: 14px;
+            opacity: 0.7;
+            z-index: 1000;
+            font-family: inherit;
+        `;
+        document.body.appendChild(skipMessage);
+    }
+    skipMessage.style.display = 'block';
+}
+
+function hideSkipMessage() {
+    const skipMessage = document.getElementById('skipMessage');
+    if (skipMessage) {
+        skipMessage.style.display = 'none';
+    }
+}
+
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        typeNextChar();
+        showSkipMessage();
+    }, 1000);
+});
+
 // 스페이스바 키 이벤트 리스너 추가
-document.addEventListener('keydown', (event) => {
+window.addEventListener('keydown', (event) => {
     if (event.code === 'Space') {
-        event.preventDefault(); // 스페이스바 기본 동작 방지
-        
-        // 이미 스킵했거나 게임 시작 버튼이 표시된 경우 무시
-        if (isTypingSkipped || startButton.style.display === "inline-block") {
-            return;
-        }
-        
+        event.preventDefault(); // 스페이스바의 기본 동작 방지
         skipTyping();
     }
 });
 
-window.addEventListener('load', () => {
-    // 스킵 안내 텍스트 추가
-    skipTextElement = document.createElement('div');
-    skipTextElement.innerHTML = 'SPACE 키를 눌러 스킵하세요';
-    skipTextElement.style.cssText = `
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 14px;
-        font-family: Arial, sans-serif;
-        text-align: center;
-        z-index: 1000;
-        animation: pulse 2s infinite;
-    `;
-    
-    // 펄스 애니메이션 CSS 추가
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes pulse {
-            0% { opacity: 0.7; }
-            50% { opacity: 1; }
-            100% { opacity: 0.7; }
-        }
-    `;
-    document.head.appendChild(style);
-    document.body.appendChild(skipTextElement);
-    
-    setTimeout(typeNextChar, 1000);
-});
+
+
+
 
 let moonScene, moonCamera, moonRenderer, moonMesh;
 
@@ -156,6 +183,10 @@ function animateMoon() {
     moonMesh.rotation.y += 0.01;
     moonRenderer.render(moonScene, moonCamera);
 }
+
+
+
+
 
 function startGame() {
     const intro = document.getElementById('introScreen');

@@ -2186,14 +2186,14 @@ function updateCameraMovement() {
 /* 떨림 억제용 보정(박재현) */
 function stabilisePlanets() {
     planets.forEach(planet => {
-        // 1) Dead-zone : 중심 아주 근처면 힘 제거
+        // Dead-zone : 중심 아주 근처면 힘 제거
         const pos = planet.body.position;
         const dist2 = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
         if (dist2 < DEAD_ZONE * DEAD_ZONE) {           // r < DEAD_ZONE
             planet.body.force.set(0, 0, 0);
         }
 
-        // 2) 저속 스냅 : 미세 진동 제거
+        // 저속 스냅 : 미세 진동 제거
         const v = planet.body.velocity;
         const speed2 = v.x * v.x + v.y * v.y + v.z * v.z;
         if (speed2 < SNAP_SPEED * SNAP_SPEED) {        // |v| < SNAP_SPEED
@@ -2211,7 +2211,7 @@ function launchStraightPlanet() {
 
     isLaunching = true;
 
-    // 카메라가 바라보는 방향으로 발사 방향 설정 (수정)
+    // 카메라가 바라보는 방향으로 발사 방향 설정
     const cameraDirection = new THREE.Vector3(
         -Math.sin(cameraAngle),  // 부호 반전
         0,
@@ -2228,7 +2228,7 @@ function launchStraightPlanet() {
     // 새로운 행성 생성
     const newPlanet = createPlanet(currentPlanetType, startPosition);
 
-    // 직선 속도 설정 (중력의 영향을 받지 않도록 충분히 빠른 속도로)
+    // 직선 속도 설정
     const straightVelocity = cameraDirection.clone().multiplyScalar(15);
     newPlanet.body.velocity.copy(new CANNON.Vec3(straightVelocity.x, straightVelocity.y, straightVelocity.z));
 

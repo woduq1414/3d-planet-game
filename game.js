@@ -863,7 +863,7 @@ function setupEventListeners() {
     });
 }
 
-// 행성 생성 (반발력 감소)
+// 행성 생성
 function createPlanet(type, position) {
     const planetData = PLANET_TYPES[type];
 

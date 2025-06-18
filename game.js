@@ -675,170 +675,216 @@ function updatePlanetPreview() {
     newImg.src = `textures/${planetData.texture}`;
 }
 
-// 이벤트 리스너 설정 (드래그 시스템)
-function setupEventListeners() {
-    // 마우스 다운 (드래그 시작)
-    renderer.domElement.addEventListener('mousedown', (event) => {
-        if (!gameRunning || !canDrag) return;
+// 좌표 정규화 함수
+function getNormalizedCoordinates(clientX, clientY) {
+    return {
+        x: (clientX / window.innerWidth) * 2 - 1,
+        y: -(clientY / window.innerHeight) * 2 + 1
+    };
+}
 
-        isDragging = true;
-        dragStart.x = (event.clientX / window.innerWidth) * 2 - 1;
-        dragStart.y = -(event.clientY / window.innerHeight) * 2 + 1;
+// 드래그 시작 처리 함수
+function handleDragStart(clientX, clientY) {
+    if (!gameRunning || !canDrag) return;
 
-        // UI 업데이트
-        if (window.showTrajectoryInfo) {
-            window.showTrajectoryInfo(true);
+    isDragging = true;
+    const coords = getNormalizedCoordinates(clientX, clientY);
+    dragStart.x = coords.x;
+    dragStart.y = coords.y;
+
+    // UI 업데이트
+    if (window.showTrajectoryInfo) {
+        window.showTrajectoryInfo(true);
+    }
+}
+
+// 드래그 중 처리 함수
+function handleDragMove(clientX, clientY) {
+    const coords = getNormalizedCoordinates(clientX, clientY);
+    mouse.x = coords.x;
+    mouse.y = coords.y;
+
+    if (isDragging) {
+        dragEnd.x = mouse.x;
+        dragEnd.y = mouse.y;
+
+        // 드래그 벡터 계산
+        const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
+        const rawPower = dragVector.length() * 10;
+
+        // 파워 계산 로직 수정 (박재현)
+        // 실제 파워는 최대 파워의 50%까지만 사용
+        const maxDragPower = GAME_CONFIG.maxPower * 0.5;
+        const actualPower = Math.min(rawPower, maxDragPower);
+
+        // 파워 게이지 표시는 100% 스케일로 보여줌 (박재현)
+        launchPower = actualPower * 2;
+
+        // 발사 방향 계산 (드래그 반대 방향)
+        const direction = new THREE.Vector3(-dragVector.x, -dragVector.y, -1).normalize();
+
+        // 카메라 기준 좌표계 설정
+        const cameraDirection = new THREE.Vector3(
+            Math.sin(cameraAngle),
+            0,
+            Math.cos(cameraAngle)
+        ).normalize();
+
+        const rightVector = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
+        const upVector = new THREE.Vector3(0, 1, 0);
+
+        // 카메라 기준 고정 발사 위치
+        const launchOffset = new THREE.Vector3()
+            .addScaledVector(cameraDirection, -3) // 카메라에서 3만큼 앞쪽
+            .addScaledVector(upVector, -2); // 아래쪽 2만큼
+
+        const startPos = camera.position.clone().add(launchOffset);
+
+        // 마우스 드래그 방향을 월드 좌표계로 변환
+        const worldDirection = new THREE.Vector3()
+            .addScaledVector(rightVector, -direction.x) // 좌우 방향
+            .addScaledVector(upVector, direction.y)     // 상하 방향
+            .addScaledVector(cameraDirection, -direction.z) // 전후 방향 (카메라 쪽으로)
+            .normalize();
+
+        // 카메라 쪽으로 날아가는 것을 방지 (z 성분을 양수로 제한)
+        const cameraDot = worldDirection.dot(cameraDirection);
+        if (cameraDot > 0) {
+            // 카메라 방향 성분을 제거하고 재정규화
+            worldDirection.addScaledVector(cameraDirection, -cameraDot);
+            worldDirection.normalize();
         }
-    });
 
-    // 마우스 이동 (드래그 중)
-    renderer.domElement.addEventListener('mousemove', (event) => {
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        // 궤적 표시 (파워에 비례한 속도로)
+        const velocity = worldDirection.clone().multiplyScalar(launchPower * 0.37);
+        updateTrajectory(startPos, velocity);
 
-        if (isDragging) {
-            dragEnd.x = mouse.x;
-            dragEnd.y = mouse.y;
+        // 궤적 라인 스타일을 파워에 따라 조정
+        if (trajectoryLine) {
+            trajectoryLine.visible = true;
 
-            // 드래그 벡터 계산
-            const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
-            const rawPower = dragVector.length() * 10;
+      
+            const powerRatio = launchPower / GAME_CONFIG.maxPower;
+            if (powerRatio < 0.3) {
+                trajectoryLine.material.color.setHex(0x00ff00); // 약한 파워: 녹색
+            } else if (powerRatio < 0.7) {
+                trajectoryLine.material.color.setHex(0x00ffff); // 중간 파워: 시안색
+            } else {
+                trajectoryLine.material.color.setHex(0xff0088); // 강한 파워: 핑크색
+            }
+        }
 
-            // 파워 계산 로직 수정 (박재현)
-            // 실제 파워는 최대 파워의 50%까지만 사용
-            const maxDragPower = GAME_CONFIG.maxPower * 0.5;
-            const actualPower = Math.min(rawPower, maxDragPower);
+        // 조준용 행성 위치 업데이트
+        if (aimingPlanet) {
+            aimingPlanet.position.copy(startPos);
+            // 파워에 따라 행성 크기 조절
+            const sizeScale = 1 + (launchPower / GAME_CONFIG.maxPower) * 0.3;
+            aimingPlanet.scale.setScalar(sizeScale);
+        }
 
-            // 파워 게이지 표시는 100% 스케일로 보여줌 (박재현)
-            launchPower = actualPower * 2;
+        // 파워 미터 UI 업데이트
+        if (window.updatePowerMeter) {
+            window.updatePowerMeter(launchPower);
+        }
+    }
+}
 
+// 드래그 종료 처리 함수 
+function handleDragEnd() {
+    if (!gameRunning || !isDragging) return;
 
+    isDragging = false;
 
-            // 발사 방향 계산 (드래그 반대 방향)
-            const direction = new THREE.Vector3(-dragVector.x, -dragVector.y, -1).normalize();
+    if (launchPower > 0.5) { // 최소 파워 체크
+        const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
+        const direction = new THREE.Vector3(-dragVector.x, -dragVector.y, -1).normalize();
 
-            // 카메라 기준 좌표계 설정
+        // 실제 발사 파워는 표시된 파워의 절반으로 설정 (박재현)
+        const actualLaunchPower = launchPower * 0.5;
+
+        // 드래그 불가능 상태로 설정 (박재현)
+        canDrag = false;
+
+        // 0.5초 후 드래그 가능 상태로 복구 (박재현)
+        setTimeout(() => {
+            canDrag = true;
+        }, 500);
+
+        launchPlanet(direction, actualLaunchPower);
+
+        // 조준용 행성을 원래 위치로 되돌리기
+        if (aimingPlanet) {
             const cameraDirection = new THREE.Vector3(
                 Math.sin(cameraAngle),
                 0,
                 Math.cos(cameraAngle)
             ).normalize();
 
-            const rightVector = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
             const upVector = new THREE.Vector3(0, 1, 0);
 
-            // 카메라 기준 고정 발사 위치
             const launchOffset = new THREE.Vector3()
                 .addScaledVector(cameraDirection, -3) // 카메라에서 3만큼 앞쪽
                 .addScaledVector(upVector, -2); // 아래쪽 2만큼
 
-            const startPos = camera.position.clone().add(launchOffset);
+            const aimingPosition = camera.position.clone().add(launchOffset);
+            aimingPlanet.position.copy(aimingPosition);
 
-            // 마우스 드래그 방향을 월드 좌표계로 변환
-            const worldDirection = new THREE.Vector3()
-                .addScaledVector(rightVector, -direction.x) // 좌우 방향
-                .addScaledVector(upVector, direction.y)     // 상하 방향
-                .addScaledVector(cameraDirection, -direction.z) // 전후 방향 (카메라 쪽으로)
-                .normalize();
-
-            // 카메라 쪽으로 날아가는 것을 방지 (z 성분을 양수로 제한)
-            const cameraDot = worldDirection.dot(cameraDirection);
-            if (cameraDot > 0) {
-                // 카메라 방향 성분을 제거하고 재정규화
-                worldDirection.addScaledVector(cameraDirection, -cameraDot);
-                worldDirection.normalize();
-            }
-
-            // 궤적 표시 (파워에 비례한 속도로)
-            const velocity = worldDirection.clone().multiplyScalar(launchPower * 0.37);
-            updateTrajectory(startPos, velocity);
-
-            // 궤적 라인 스타일을 파워에 따라 조정
-            if (trajectoryLine) {
-                trajectoryLine.visible = true;
-
-                // 파워에 따른 색상 변화를 더 명확하게
-                const powerRatio = launchPower / GAME_CONFIG.maxPower;
-                if (powerRatio < 0.3) {
-                    trajectoryLine.material.color.setHex(0x00ff00); // 약한 파워: 녹색
-                } else if (powerRatio < 0.7) {
-                    trajectoryLine.material.color.setHex(0x00ffff); // 중간 파워: 시안색
-                } else {
-                    trajectoryLine.material.color.setHex(0xff0088); // 강한 파워: 핑크색
-                }
-            }
-
-            // 조준용 행성 위치 업데이트 (발사 지점에 표시)
-            if (aimingPlanet) {
-                aimingPlanet.position.copy(startPos);
-                // 파워에 따라 행성 크기도 살짝 조절
-                const sizeScale = 1 + (launchPower / GAME_CONFIG.maxPower) * 0.3;
-                aimingPlanet.scale.setScalar(sizeScale);
-            }
-
-            // 파워 미터 UI 업데이트
-            if (window.updatePowerMeter) {
-                window.updatePowerMeter(launchPower);
-            }
+            // 크기도 원래대로 되돌리기
+            aimingPlanet.scale.setScalar(1);
         }
+
+        // 궤적 라인 숨기기
+        trajectoryLine.visible = false;
+
+        // UI 업데이트
+        if (window.showTrajectoryInfo) {
+            window.showTrajectoryInfo(false);
+        }
+        if (window.updatePowerMeter) {
+            window.updatePowerMeter(0);
+        }
+    }
+}
+
+// 이벤트 리스너 설정 
+function setupEventListeners() {
+    // 마우스 이벤트
+    renderer.domElement.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        handleDragStart(event.clientX, event.clientY);
     });
 
-    // 마우스 업 (발사)
+    renderer.domElement.addEventListener('mousemove', (event) => {
+        event.preventDefault();
+        handleDragMove(event.clientX, event.clientY);
+    });
+
     renderer.domElement.addEventListener('mouseup', (event) => {
-        if (!gameRunning || !isDragging) return;
-
-        isDragging = false;
-
-        if (launchPower > 0.5) { // 최소 파워 체크
-            const dragVector = new THREE.Vector2().subVectors(dragEnd, dragStart);
-            const direction = new THREE.Vector3(-dragVector.x, -dragVector.y, -1).normalize();
-
-            // 실제 발사 파워는 표시된 파워의 절반으로 설정 (박재현)
-            const actualLaunchPower = launchPower * 0.5;
-
-            // 드래그 불가능 상태로 설정 (박재현)
-            canDrag = false;
-
-            // 0.5초 후 드래그 가능 상태로 복구 (박재현)
-            setTimeout(() => {
-                canDrag = true;
-            }, 500);
-
-            launchPlanet(direction, actualLaunchPower);
-
-            // 조준용 행성을 원래 위치로 되돌리기
-            if (aimingPlanet) {
-                const cameraDirection = new THREE.Vector3(
-                    Math.sin(cameraAngle),
-                    0,
-                    Math.cos(cameraAngle)
-                ).normalize();
-
-                const upVector = new THREE.Vector3(0, 1, 0);
-
-                const launchOffset = new THREE.Vector3()
-                    .addScaledVector(cameraDirection, -3) // 카메라에서 3만큼 앞쪽
-                    .addScaledVector(upVector, -2); // 아래쪽 2만큼
-
-                const aimingPosition = camera.position.clone().add(launchOffset);
-                aimingPlanet.position.copy(aimingPosition);
-
-                // 크기도 원래대로 되돌리기
-                aimingPlanet.scale.setScalar(1);
-            }
-
-            // 궤적 라인 숨기기
-            trajectoryLine.visible = false;
-
-            // UI 업데이트
-            if (window.showTrajectoryInfo) {
-                window.showTrajectoryInfo(false);
-            }
-            if (window.updatePowerMeter) {
-                window.updatePowerMeter(0);
-            }
-        }
+        event.preventDefault();
+        handleDragEnd();
     });
+
+    // 터치 이벤트 
+    renderer.domElement.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        if (event.touches.length === 1) {
+            const touch = event.touches[0];
+            handleDragStart(touch.clientX, touch.clientY);
+        }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener('touchmove', (event) => {
+        event.preventDefault();
+        if (event.touches.length === 1) {
+            const touch = event.touches[0];
+            handleDragMove(touch.clientX, touch.clientY);
+        }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener('touchend', (event) => {
+        event.preventDefault();
+        handleDragEnd();
+    }, { passive: false });
 
     // 키보드 이벤트 (부드러운 카메라 움직임)
     window.addEventListener('keydown', (event) => {
@@ -1219,8 +1265,6 @@ function createMergeEffect(position, planetLevel = 0) {
     // 4. 별빛 흩어짐 효과
     createStarBurst(position, scale, intensity, planetColor);
 
-    // 5. 공간 왜곡 효과
-    // createSpaceDistortion(position);
 
     // 소리 효과는 mergePlanets에서 행성별로 재생됨
 }
@@ -1488,46 +1532,7 @@ function createStarBurst(position, scale = 1, intensity = 1, planetColor = new T
     animate();
 }
 
-// 공간 왜곡 효과
-function createSpaceDistortion(position) {
-    const distortionGeometry = new THREE.SphereGeometry(1, 32, 32);
-    const distortionMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4400ff,
-        transparent: true,
-        opacity: 0.1,
-        wireframe: true
-    });
 
-    const distortion = new THREE.Mesh(distortionGeometry, distortionMaterial);
-    distortion.position.copy(position);
-    scene.add(distortion);
-
-    // 왜곡 애니메이션
-    const startTime = Date.now();
-    const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = elapsed / 1200; // 1.2초
-
-        if (progress < 1) {
-            // 불규칙한 크기 변화로 공간 왜곡 표현
-            const waveX = 1 + Math.sin(progress * Math.PI * 4) * 0.3;
-            const waveY = 1 + Math.cos(progress * Math.PI * 6) * 0.2;
-            const waveZ = 1 + Math.sin(progress * Math.PI * 8) * 0.25;
-
-            distortion.scale.set(waveX * (1 + progress * 3), waveY * (1 + progress * 3), waveZ * (1 + progress * 3));
-            distortion.material.opacity = 0.1 * (1 - progress);
-
-            // 회전 효과
-            distortion.rotation.x += 0.05;
-            distortion.rotation.y += 0.03;
-
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(distortion);
-        }
-    };
-    animate();
-}
 
 // 행성별 음계 사운드 (도-레-미-파-솔-라-시-도)
 function playPlanetSound(planetType) {
